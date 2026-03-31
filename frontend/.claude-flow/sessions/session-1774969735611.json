@@ -1,0 +1,14 @@
+{
+  "id": "session-1774969735611",
+  "startedAt": "2026-03-31T15:08:55.611Z",
+  "cwd": "/Users/daniilschovkunov/polyprofit/frontend",
+  "context": {},
+  "metrics": {
+    "edits": 20,
+    "commands": 0,
+    "tasks": 0,
+    "errors": 0
+  },
+  "endedAt": "2026-03-31T15:58:38.383Z",
+  "duration": 2982773
+}

@@ -1,9 +1,12 @@
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use axum::extract::State;
+use axum::http::{header, HeaderMap, HeaderValue};
 use axum::routing::get;
 use axum::{Json, Router};
+use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +17,11 @@ pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/status", get(status))
         .route("/positions", get(positions))
         .route("/trades", get(trades))
+        .route("/markets", get(markets))
         .route("/db/stats", get(db_stats))
+        .route("/pnl-history", get(pnl_history))
+        .route("/analytics", get(analytics))
+        .route("/trades/export", get(export_trades))
         .route("/pause", axum::routing::post(pause))
         .route("/resume", axum::routing::post(resume))
         .route("/kill", axum::routing::post(kill))
@@ -93,6 +100,22 @@ async fn trades(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     Json(serde_json::json!({ "trades": recent }))
 }
 
+async fn markets(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    let markets: Vec<_> = state.markets.iter().map(|entry| {
+        let m = entry.value();
+        serde_json::json!({
+            "condition_id": m.condition_id.0,
+            "asset": m.asset,
+            "kind": m.kind,
+            "question": m.question,
+            "strike": m.strike.map(|s| s.to_string()),
+            "end_time": m.end_time.to_rfc3339(),
+            "active": m.active,
+        })
+    }).collect();
+    Json(serde_json::json!({ "markets": markets }))
+}
+
 async fn db_stats(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     match state.db.as_ref() {
         Some(db) => {
@@ -111,6 +134,215 @@ async fn db_stats(State(state): State<Arc<AppState>>) -> Json<serde_json::Value>
         })),
     }
 }
+
+/// Return PnL history from persisted trades for the equity curve.
+/// Returns [{time, pnl}] where pnl is cumulative realized PnL at each trade.
+async fn pnl_history(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    let trades = state.trades.read();
+    let mut cumulative = rust_decimal::Decimal::ZERO;
+    let points: Vec<serde_json::Value> = trades
+        .iter()
+        .filter_map(|t| {
+            let pnl = t.pnl?;
+            cumulative += pnl;
+            Some(serde_json::json!({
+                "time": t.timestamp.format("%H:%M:%S").to_string(),
+                "pnl": cumulative.to_string(),
+            }))
+        })
+        .collect();
+
+    Json(serde_json::json!({ "points": points }))
+}
+
+// ── Analytics ──
+
+#[derive(Serialize)]
+struct Analytics {
+    total_trades: usize,
+    winning_trades: usize,
+    losing_trades: usize,
+    pending_trades: usize,
+    win_rate: f64,
+    total_pnl: String,
+    best_trade_pnl: Option<String>,
+    worst_trade_pnl: Option<String>,
+    avg_trade_pnl: Option<String>,
+    avg_win: Option<String>,
+    avg_loss: Option<String>,
+    profit_factor: Option<f64>,
+    by_asset: HashMap<String, AssetStats>,
+}
+
+#[derive(Serialize)]
+struct AssetStats {
+    trades: usize,
+    wins: usize,
+    losses: usize,
+    total_pnl: String,
+}
+
+async fn analytics(State(state): State<Arc<AppState>>) -> Json<Analytics> {
+    let trades = state.trades.read();
+
+    let mut winning_trades: usize = 0;
+    let mut losing_trades: usize = 0;
+    let mut pending_trades: usize = 0;
+    let mut total_pnl = Decimal::ZERO;
+    let mut best_pnl: Option<Decimal> = None;
+    let mut worst_pnl: Option<Decimal> = None;
+    let mut sum_wins = Decimal::ZERO;
+    let mut sum_losses = Decimal::ZERO;
+    let mut by_asset: HashMap<String, (usize, usize, usize, Decimal)> = HashMap::new();
+
+    for trade in trades.iter() {
+        let asset = state
+            .markets
+            .get(&trade.condition_id)
+            .map(|m| m.asset.to_string())
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        let entry = by_asset.entry(asset).or_insert((0, 0, 0, Decimal::ZERO));
+        entry.0 += 1; // trades
+
+        match trade.pnl {
+            Some(pnl) => {
+                total_pnl += pnl;
+                entry.3 += pnl;
+
+                if pnl > Decimal::ZERO {
+                    winning_trades += 1;
+                    sum_wins += pnl;
+                    entry.1 += 1;
+                } else if pnl < Decimal::ZERO {
+                    losing_trades += 1;
+                    sum_losses += pnl; // negative
+                    entry.2 += 1;
+                }
+                // pnl == 0 counts as neither win nor loss
+
+                best_pnl = Some(best_pnl.map_or(pnl, |b: Decimal| b.max(pnl)));
+                worst_pnl = Some(worst_pnl.map_or(pnl, |w: Decimal| w.min(pnl)));
+            }
+            None => {
+                pending_trades += 1;
+            }
+        }
+    }
+
+    let total_trades = trades.len();
+    let resolved = winning_trades + losing_trades;
+
+    let win_rate = if resolved > 0 {
+        winning_trades as f64 / resolved as f64
+    } else {
+        0.0
+    };
+
+    let avg_trade_pnl = if resolved > 0 {
+        Some((total_pnl / Decimal::from(resolved as u64)).to_string())
+    } else {
+        None
+    };
+
+    let avg_win = if winning_trades > 0 {
+        Some((sum_wins / Decimal::from(winning_trades as u64)).to_string())
+    } else {
+        None
+    };
+
+    let avg_loss = if losing_trades > 0 {
+        Some((sum_losses / Decimal::from(losing_trades as u64)).to_string())
+    } else {
+        None
+    };
+
+    let profit_factor = if sum_losses < Decimal::ZERO {
+        use rust_decimal::prelude::ToPrimitive;
+        let wins_f = sum_wins.to_f64().unwrap_or(0.0);
+        let losses_f = sum_losses.abs().to_f64().unwrap_or(0.0);
+        if losses_f > 0.0 {
+            Some(wins_f / losses_f)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let by_asset_stats: HashMap<String, AssetStats> = by_asset
+        .into_iter()
+        .map(|(asset, (t, w, l, pnl))| {
+            (
+                asset,
+                AssetStats {
+                    trades: t,
+                    wins: w,
+                    losses: l,
+                    total_pnl: pnl.to_string(),
+                },
+            )
+        })
+        .collect();
+
+    Json(Analytics {
+        total_trades,
+        winning_trades,
+        losing_trades,
+        pending_trades,
+        win_rate,
+        total_pnl: total_pnl.to_string(),
+        best_trade_pnl: best_pnl.map(|d| d.to_string()),
+        worst_trade_pnl: worst_pnl.map(|d| d.to_string()),
+        avg_trade_pnl,
+        avg_win,
+        avg_loss,
+        profit_factor,
+        by_asset: by_asset_stats,
+    })
+}
+
+// ── CSV Export ──
+
+async fn export_trades(State(state): State<Arc<AppState>>) -> (HeaderMap, String) {
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("text/csv"));
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("attachment; filename=\"polyprofit_trades.csv\""),
+    );
+
+    let trades = state.trades.read();
+    let mut csv = String::from("timestamp,condition_id,asset,side,price,size,pnl,is_adverse\n");
+
+    for trade in trades.iter() {
+        let asset = state
+            .markets
+            .get(&trade.condition_id)
+            .map(|m| m.asset.to_string())
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        let pnl_str = trade
+            .pnl
+            .map(|p| p.to_string())
+            .unwrap_or_default();
+
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{},{}\n",
+            trade.timestamp.to_rfc3339(),
+            trade.condition_id.0,
+            asset,
+            trade.side,
+            trade.price,
+            trade.size,
+            pnl_str,
+            trade.is_adverse,
+        ));
+    }
+
+    (headers, csv)
+}
+
 async fn pause(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     state.paused.store(true, Ordering::Relaxed);
     tracing::info!("Bot PAUSED via API");
@@ -182,6 +414,8 @@ struct ConfigUpdate {
     drawdown_limit: Option<String>,
     #[serde(default)]
     adverse_fill_pause: Option<u32>,
+    #[serde(default)]
+    assets: Option<Vec<String>>,
 }
 
 async fn update_config(
@@ -274,6 +508,24 @@ async fn update_config(
     if let Some(afp) = update.adverse_fill_pause {
         cfg.adverse_fill_pause = afp;
         changes.push(format!("adverse_fill_pause: {}", afp));
+    }
+
+    // Assets update — use FromStr to avoid hardcoded matching
+    if let Some(ref asset_list) = update.assets {
+        if asset_list.is_empty() {
+            return Json(serde_json::json!({ "error": "assets list must not be empty" }));
+        }
+        let mut parsed = Vec::new();
+        for name in asset_list {
+            match name.parse::<pp_core::Asset>() {
+                Ok(asset) => parsed.push(asset),
+                Err(e) => {
+                    return Json(serde_json::json!({ "error": e }));
+                }
+            }
+        }
+        cfg.assets = parsed;
+        changes.push(format!("assets: {:?}", asset_list));
     }
 
     // Cross-field validation: min_prob must be < max_prob

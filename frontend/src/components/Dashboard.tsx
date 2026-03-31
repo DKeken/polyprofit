@@ -12,6 +12,7 @@ import { useBot, type Trade, type PnlPoint, type PositionInfo } from "../hooks/u
 import PriceMonitor from "./PriceMonitor";
 import Controls from "./Controls";
 import Settings from "./Settings";
+import Markets from "./Markets";
 
 /* ── Small sub-components ── */
 
@@ -263,7 +264,7 @@ function PositionRow({ pos }: { pos: PositionInfo }) {
   );
 }
 
-type Tab = "dashboard" | "positions" | "settings";
+type Tab = "dashboard" | "positions" | "markets" | "settings";
 
 /* ── Main Dashboard ── */
 
@@ -369,6 +370,21 @@ export default function Dashboard() {
             )}
           </button>
           <button
+            onClick={() => setTab("markets")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              tab === "markets"
+                ? "bg-zinc-800 text-zinc-100"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            Markets
+            {tick.markets > 0 && (
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-sky-500/20 text-sky-400 text-[10px]">
+                {tick.markets}
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => setTab("settings")}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               tab === "settings"
@@ -383,6 +399,8 @@ export default function Dashboard() {
         {/* ── Tab Content ── */}
         {tab === "settings" ? (
           <Settings config={tick.config} onSave={updateConfig} />
+        ) : tab === "markets" ? (
+          <Markets />
         ) : tab === "positions" ? (
           /* ── Positions View ── */
           <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4">
@@ -509,7 +527,7 @@ export default function Dashboard() {
                       </thead>
                       <tbody>
                         {tick.trades.map((t, i) => (
-                          <TradeRow key={i} trade={t} />
+                          <TradeRow key={`${t.ts}-${i}`} trade={t} />
                         ))}
                       </tbody>
                     </table>

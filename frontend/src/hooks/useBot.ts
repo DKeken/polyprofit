@@ -54,6 +54,7 @@ const INITIAL: Tick = {
     max_concurrent: 50,
     drawdown_limit: "0.20",
     adverse_fill_pause: 3,
+    assets: ["Btc", "Eth", "Sol", "Xrp"],
   },
   drawdown_pct: 0,
   uptime_secs: 0,
@@ -66,6 +67,19 @@ export function useBot() {
   const [tick, setTick] = useState<Tick>(INITIAL);
   const [connected, setConnected] = useState(false);
   const [pnlHistory, setPnlHistory] = useState<PnlPoint[]>([]);
+
+  // Load persisted PnL history on mount (so equity curve survives page refresh)
+  useEffect(() => {
+    api.pnlHistory().then((res) => {
+      if (res.points.length > 0) {
+        const initial: PnlPoint[] = res.points.map((p) => ({
+          time: p.time,
+          pnl: parseFloat(p.pnl) || 0,
+        }));
+        setPnlHistory(initial);
+      }
+    }).catch(() => { /* ignore — old backend without this endpoint */ });
+  }, []);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -125,7 +139,7 @@ export function useBot() {
   }, []);
 
   const updateConfig = useCallback(
-    (updates: Record<string, string | number>) => api.updateConfig(updates),
+    (updates: Record<string, string | number | string[]>) => api.updateConfig(updates),
     [],
   );
 

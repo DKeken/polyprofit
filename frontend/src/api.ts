@@ -35,9 +35,38 @@ export interface ConfigErrorResponse {
 
 type ConfigResult = ConfigUpdateResponse | ConfigErrorResponse;
 
+export interface PnlHistoryPoint {
+  time: string;
+  pnl: string;
+}
+
+export interface PnlHistoryResponse {
+  points: PnlHistoryPoint[];
+}
+
+export interface MarketInfo {
+  condition_id: string;
+  asset: string;
+  kind: string;
+  question: string;
+  strike: string | null;
+  end_time: string;
+  active: boolean;
+}
+
+export interface MarketsResponse {
+  markets: MarketInfo[];
+}
+
 // ── Internal helpers ──
 
 const BASE = "";
+
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`);
+  if (!res.ok) throw new Error(`GET ${path}: ${res.status}`);
+  return res.json() as Promise<T>;
+}
 
 async function post<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { method: "POST" });
@@ -68,6 +97,12 @@ export const api = {
   kill: () => post<KillResponse>("/api/kill"),
 
   /** Partial config update. Only send changed fields. */
-  updateConfig: (updates: Record<string, string | number>) =>
+  updateConfig: (updates: Record<string, string | number | string[]>) =>
     put<ConfigResult>("/api/config", updates),
+
+  /** Load PnL history from persisted trades (for equity curve on page load) */
+  pnlHistory: () => get<PnlHistoryResponse>("/api/pnl-history"),
+
+  /** Fetch active markets */
+  getMarkets: () => get<MarketsResponse>("/api/markets"),
 } as const;

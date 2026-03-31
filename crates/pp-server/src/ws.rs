@@ -77,6 +77,7 @@ struct ConfigSnapshot {
     max_concurrent: usize,
     drawdown_limit: String,
     adverse_fill_pause: u32,
+    assets: Vec<String>,
 }
 
 #[derive(serde::Serialize, TS)]
@@ -240,6 +241,7 @@ fn build_tick(state: &Arc<AppState>) -> Tick {
         max_concurrent: rc.max_concurrent,
         drawdown_limit: rc.drawdown_limit.to_string(),
         adverse_fill_pause: rc.adverse_fill_pause,
+        assets: rc.assets.iter().map(|a| a.to_string()).collect(),
     };
     drop(rc);
 

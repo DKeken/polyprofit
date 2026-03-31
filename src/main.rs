@@ -63,6 +63,21 @@ async fn main() -> Result<()> {
             }
         }
     }
+
+    // Check if we need a daily PnL reset (new day since last run)
+    if let Some(ref db) = state.db {
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let saved_date = db.load_trading_date().unwrap_or(None);
+        if saved_date.as_deref() != Some(today.as_str()) {
+            // New trading day — reset daily PnL, carry forward balance
+            let current = state.current_balance_cents();
+            state.daily_pnl.store(0, std::sync::atomic::Ordering::Relaxed);
+            state.starting_balance.store(current, std::sync::atomic::Ordering::Relaxed);
+            state.peak_balance.store(current, std::sync::atomic::Ordering::Relaxed);
+            let _ = db.save_trading_date(&today);
+            info!(balance_cents = current, "New trading day — daily PnL reset");
+        }
+    }
     let fee_cache = fee_cache::new_fee_cache();
 
     // ── SDK authentication (Live only) ──

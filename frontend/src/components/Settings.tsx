@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import type { BotConfig } from "../hooks/useBot";
 
+const ALL_ASSETS = ["BTC", "ETH", "SOL", "XRP"] as const;
+
 interface Props {
   config: BotConfig;
-  onSave: (updates: Record<string, string | number>) => Promise<unknown>;
+  onSave: (updates: Record<string, string | number | string[]>) => Promise<unknown>;
 }
 
 interface FieldDef {
@@ -34,6 +36,7 @@ const FIELDS: FieldDef[] = [
 
 export default function Settings({ config, onSave }: Props) {
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [draftAssets, setDraftAssets] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -44,24 +47,42 @@ export default function Settings({ config, onSave }: Props) {
       d[f.key] = String(config[f.key]);
     }
     setDraft(d);
+    setDraftAssets([...config.assets]);
   }, [config]);
 
-  const changed = FIELDS.filter(
+  const fieldChanged = FIELDS.filter(
     (f) => draft[f.key] !== undefined && draft[f.key] !== String(config[f.key]),
   );
 
+  const assetsChanged =
+    JSON.stringify([...draftAssets].sort()) !==
+    JSON.stringify([...config.assets].sort());
+
+  const totalChanges = fieldChanged.length + (assetsChanged ? 1 : 0);
+
+  function toggleAsset(asset: string) {
+    setDraftAssets((prev) =>
+      prev.includes(asset)
+        ? prev.filter((a) => a !== asset)
+        : [...prev, asset],
+    );
+  }
+
   async function handleSave() {
-    if (changed.length === 0) return;
+    if (totalChanges === 0) return;
     setSaving(true);
     setMsg("");
-    const updates: Record<string, string | number> = {};
-    for (const f of changed) {
+    const updates: Record<string, string | number | string[]> = {};
+    for (const f of fieldChanged) {
       const val = draft[f.key];
       if (f.type === "integer") {
         updates[f.key] = parseInt(val, 10);
       } else {
         updates[f.key] = val;
       }
+    }
+    if (assetsChanged) {
+      updates.assets = draftAssets;
     }
     try {
       const res = await onSave(updates) as { error?: string; changes?: string[] };
@@ -143,18 +164,46 @@ export default function Settings({ config, onSave }: Props) {
         {riskFields.map(renderField)}
       </div>
 
+      {/* Assets */}
+      <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4">
+        <h3 className="text-sm text-zinc-400 uppercase tracking-wider mb-3">
+          Assets
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {ALL_ASSETS.map((asset) => {
+            const active = draftAssets.includes(asset);
+            return (
+              <button
+                key={asset}
+                onClick={() => toggleAsset(asset)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+                  active
+                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-800"
+                    : "bg-zinc-800 text-zinc-500 border-zinc-700 hover:text-zinc-300"
+                }`}
+              >
+                {asset}
+              </button>
+            );
+          })}
+        </div>
+        {draftAssets.length === 0 && (
+          <p className="text-red-400 text-xs mt-2">At least one asset required</p>
+        )}
+      </div>
+
       {/* Save */}
       <div className="flex items-center gap-3">
         <button
           onClick={handleSave}
-          disabled={saving || changed.length === 0}
+          disabled={saving || totalChanges === 0 || draftAssets.length === 0}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            changed.length > 0
+            totalChanges > 0 && draftAssets.length > 0
               ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
               : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
           }`}
         >
-          {saving ? "Saving…" : `Save ${changed.length} change${changed.length !== 1 ? "s" : ""}`}
+          {saving ? "Saving…" : `Save ${totalChanges} change${totalChanges !== 1 ? "s" : ""}`}
         </button>
         {msg && (
           <span

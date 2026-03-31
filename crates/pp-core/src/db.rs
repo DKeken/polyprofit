@@ -96,6 +96,27 @@ impl BotDb {
         Ok(trades)
     }
 
+    /// Load the most recent N trades from DB (for display).
+    pub fn load_recent_trades(&self, limit: usize) -> Result<Vec<TradeLog>> {
+        let txn = self.db.begin_read()?;
+        let table = txn.open_table(TRADES)?;
+        let mut trades = Vec::new();
+        // Iterate in reverse order (newest first)
+        for entry in table.iter()?.rev() {
+            if trades.len() >= limit {
+                break;
+            }
+            let (_, val) = entry?;
+            match serde_json::from_str::<TradeLog>(val.value()) {
+                Ok(t) => trades.push(t),
+                Err(e) => warn!("Skipping corrupt trade record: {e}"),
+            }
+        }
+        // Reverse so newest is last (matches in-memory Vec order)
+        trades.reverse();
+        Ok(trades)
+    }
+
     /// Count of trades in DB.
     pub fn trade_count(&self) -> Result<u64> {
         let txn = self.db.begin_read()?;
@@ -177,9 +198,22 @@ impl BotDb {
             None => Ok(None),
         }
     }
+
+    // ── Trading Date ──
+
+    /// Save the date of the last trading day (for daily PnL reset).
+    pub fn save_trading_date(&self, date: &str) -> Result<()> {
+        self.save_state("trading_date", date)
+    }
+
+    /// Load the last trading day date.
+    pub fn load_trading_date(&self) -> Result<Option<String>> {
+        self.load_state("trading_date")
+    }
 }
 
 /// Periodic checkpoint task — saves state every N seconds.
+/// Also handles daily PnL reset at midnight UTC.
 pub async fn checkpoint_loop(state: Arc<crate::AppState>, interval_secs: u64) -> Result<()> {
     use std::sync::atomic::Ordering;
 
@@ -187,6 +221,33 @@ pub async fn checkpoint_loop(state: Arc<crate::AppState>, interval_secs: u64) ->
         tokio::time::sleep(std::time::Duration::from_secs(interval_secs)).await;
 
         if let Some(ref db) = state.db {
+            // ── Daily PnL reset check ──
+            let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+            let saved_date = db.load_trading_date().unwrap_or(None);
+
+            if saved_date.as_deref() != Some(&today) {
+                // New trading day — reset daily PnL
+                let old_pnl = state.daily_pnl.swap(0, Ordering::Relaxed);
+                // Update peak to current balance (start fresh)
+                let current = state.current_balance_cents();
+                state.peak_balance.store(current, Ordering::Relaxed);
+                // Update starting_balance to current balance for today
+                state.starting_balance.store(current, Ordering::Relaxed);
+
+                if let Err(e) = db.save_trading_date(&today) {
+                    warn!("Failed to save trading date: {e}");
+                }
+
+                if old_pnl != 0 {
+                    info!(
+                        old_pnl_cents = old_pnl,
+                        new_starting_balance_cents = current,
+                        "Daily PnL reset (new trading day)"
+                    );
+                }
+            }
+
+            // ── Regular checkpoint ──
             let pnl = state.daily_pnl.load(Ordering::Relaxed);
             let peak = state.peak_balance.load(Ordering::Relaxed);
 
@@ -194,5 +255,106 @@ pub async fn checkpoint_loop(state: Arc<crate::AppState>, interval_secs: u64) ->
                 warn!("Balance checkpoint failed: {e}");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{ConditionId, Side, TradeLog};
+    use chrono::Utc;
+    use rust_decimal_macros::dec;
+
+    fn temp_db() -> BotDb {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "polyprofit_test_{}_{}_{}",
+            std::process::id(),
+            id,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path = dir.join("test.db");
+        std::fs::create_dir_all(&dir).unwrap();
+        BotDb::open(&path).unwrap()
+    }
+
+    #[test]
+    fn test_trade_insert_and_load() {
+        let db = temp_db();
+
+        let trade = TradeLog {
+            condition_id: ConditionId("cond_1".into()),
+            side: Side::Yes,
+            price: dec!(0.55),
+            size: dec!(10.00),
+            pnl: Some(dec!(4.50)),
+            is_adverse: false,
+            timestamp: Utc::now(),
+        };
+
+        let id = db.insert_trade(&trade).unwrap();
+        assert_eq!(id, 0);
+
+        let id2 = db.insert_trade(&trade).unwrap();
+        assert_eq!(id2, 1);
+
+        assert_eq!(db.trade_count().unwrap(), 2);
+
+        let loaded = db.load_trades().unwrap();
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded[0].price, dec!(0.55));
+        assert_eq!(loaded[0].pnl, Some(dec!(4.50)));
+    }
+
+    #[test]
+    fn test_balance_checkpoint() {
+        let db = temp_db();
+
+        assert!(db.load_balance_checkpoint().unwrap().is_none());
+
+        db.checkpoint_balance(1234, 5678).unwrap();
+
+        let (pnl, peak) = db.load_balance_checkpoint().unwrap().unwrap();
+        assert_eq!(pnl, 1234);
+        assert_eq!(peak, 5678);
+
+        // Overwrite
+        db.checkpoint_balance(-500, 9999).unwrap();
+        let (pnl, peak) = db.load_balance_checkpoint().unwrap().unwrap();
+        assert_eq!(pnl, -500);
+        assert_eq!(peak, 9999);
+    }
+
+    #[test]
+    fn test_config_save_load() {
+        let db = temp_db();
+
+        assert!(db.load_config().unwrap().is_none());
+
+        let cfg = crate::types::RuntimeConfig::default();
+        db.save_config(&cfg).unwrap();
+
+        let loaded = db.load_config().unwrap().unwrap();
+        assert_eq!(loaded.min_edge, cfg.min_edge);
+        assert_eq!(loaded.max_concurrent, cfg.max_concurrent);
+    }
+
+    #[test]
+    fn test_state_kv() {
+        let db = temp_db();
+
+        assert!(db.load_state("foo").unwrap().is_none());
+
+        db.save_state("foo", "bar").unwrap();
+        assert_eq!(db.load_state("foo").unwrap().unwrap(), "bar");
+
+        // Overwrite
+        db.save_state("foo", "baz").unwrap();
+        assert_eq!(db.load_state("foo").unwrap().unwrap(), "baz");
     }
 }
