@@ -1,0 +1,24 @@
+mode = "Demo"
+chain_id = 137
+
+[strategy]
+min_edge = "0.05"
+min_prob = "0.15"
+max_prob = "0.85"
+max_spread = "0.06"
+order_strategy = "Passive"
+market_refresh_secs = 60
+assets = ["Btc", "Eth", "Sol", "Xrp"]
+
+[risk]
+daily_loss_limit = "-100"
+daily_profit_cap = "100000"
+max_position_pct = "0.05"
+max_concurrent = 50
+drawdown_limit = "0.20"
+adverse_fill_pause = 3
+starting_balance = "1000"
+
+[server]
+port = 3000
+frontend_dist = "frontend/dist"

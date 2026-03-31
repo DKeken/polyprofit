@@ -1,0 +1,115 @@
+use rust_decimal::Decimal;
+use serde::Deserialize;
+
+use crate::types::{Asset, Mode, OrderStrategy};
+
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    pub mode: Mode,
+    pub chain_id: u64,
+    pub strategy: StrategyConfig,
+    pub risk: RiskConfig,
+    pub server: ServerConfig,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct StrategyConfig {
+    pub min_edge: Decimal,
+    pub min_prob: Decimal,
+    pub max_prob: Decimal,
+    pub max_spread: Decimal,
+    pub order_strategy: OrderStrategy,
+    pub market_refresh_secs: u64,
+    pub assets: Vec<Asset>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RiskConfig {
+    pub daily_loss_limit: Decimal,
+    pub daily_profit_cap: Decimal,
+    pub max_position_pct: Decimal,
+    pub max_concurrent: usize,
+    pub drawdown_limit: Decimal,
+    pub adverse_fill_pause: u32,
+    pub starting_balance: Decimal,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ServerConfig {
+    pub port: u16,
+    pub frontend_dist: String,
+}
+
+impl Config {
+    pub fn load(path: &str) -> anyhow::Result<Self> {
+        let content = std::fs::read_to_string(path)?;
+        let config: Config = toml::from_str(&content)?;
+        config.validate()?;
+        Ok(config)
+    }
+
+    fn validate(&self) -> anyhow::Result<()> {
+        use anyhow::bail;
+        use rust_decimal_macros::dec;
+
+        // Strategy validation
+        if self.strategy.min_edge <= Decimal::ZERO {
+            bail!("min_edge must be positive, got {}", self.strategy.min_edge);
+        }
+        if self.strategy.min_prob >= self.strategy.max_prob {
+            bail!(
+                "min_prob ({}) must be less than max_prob ({})",
+                self.strategy.min_prob,
+                self.strategy.max_prob
+            );
+        }
+        if self.strategy.min_prob < dec!(0.01) || self.strategy.max_prob > dec!(0.99) {
+            bail!("prob bounds must be in [0.01, 0.99]");
+        }
+        if self.strategy.max_spread <= Decimal::ZERO {
+            bail!("max_spread must be positive");
+        }
+        if self.strategy.market_refresh_secs == 0 {
+            bail!("market_refresh_secs must be > 0");
+        }
+        if self.strategy.assets.is_empty() {
+            bail!("assets list must not be empty");
+        }
+
+        // Risk validation
+        if self.risk.daily_loss_limit >= Decimal::ZERO {
+            bail!(
+                "daily_loss_limit must be negative, got {}",
+                self.risk.daily_loss_limit
+            );
+        }
+        if self.risk.daily_profit_cap <= Decimal::ZERO {
+            bail!("daily_profit_cap must be positive");
+        }
+        if self.risk.max_position_pct <= Decimal::ZERO || self.risk.max_position_pct > dec!(1.0) {
+            bail!(
+                "max_position_pct must be in (0, 1], got {}",
+                self.risk.max_position_pct
+            );
+        }
+        if self.risk.drawdown_limit <= Decimal::ZERO || self.risk.drawdown_limit > dec!(1.0) {
+            bail!(
+                "drawdown_limit must be in (0, 1], got {}",
+                self.risk.drawdown_limit
+            );
+        }
+        if self.risk.max_concurrent == 0 {
+            bail!("max_concurrent must be > 0");
+        }
+
+        // Starting balance
+        if self.risk.starting_balance <= Decimal::ZERO {
+            bail!(
+                "starting_balance must be positive, got {}",
+                self.risk.starting_balance
+            );
+        }
+
+        Ok(())
+    }
+}

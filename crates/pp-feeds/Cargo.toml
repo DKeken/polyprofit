@@ -1,0 +1,17 @@
+[package]
+name = "pp-feeds"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pp-core.workspace = true
+polymarket-client-sdk.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+rust_decimal.workspace = true
+futures.workspace = true
+tokio-tungstenite = { version = "0.29", features = ["rustls-tls-native-roots"] }

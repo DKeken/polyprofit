@@ -1,0 +1,71 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/pp-core",
+    "crates/pp-feeds",
+    "crates/pp-discovery",
+    "crates/pp-strategy",
+    "crates/pp-execution",
+    "crates/pp-risk",
+    "crates/pp-server",
+]
+
+[workspace.dependencies]
+tokio = { version = "1.50", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+anyhow = "1.0"
+thiserror = "2.0"
+chrono = { version = "0.4", features = ["serde"] }
+rust_decimal = { version = "1.40", features = ["serde-with-str"] }
+rust_decimal_macros = "1.40"
+reqwest = { version = "0.13", features = ["json", "rustls"], default-features = false }
+axum = { version = "0.8", features = ["ws"] }
+tower-http = { version = "0.6", features = ["cors", "fs"] }
+futures = "0.3"
+dashmap = "6.1"
+parking_lot = "0.12"
+uuid = { version = "1", features = ["v4"] }
+alloy = { version = "1", features = ["signers", "signer-local"] }
+polymarket-client-sdk = { version = "0.4", features = [
+    "clob", "ws", "rtds", "gamma", "heartbeats", "ctf", "tracing", "data"
+] }
+
+# Shared workspace crates
+pp-core = { path = "crates/pp-core" }
+pp-feeds = { path = "crates/pp-feeds" }
+pp-discovery = { path = "crates/pp-discovery" }
+pp-strategy = { path = "crates/pp-strategy" }
+pp-execution = { path = "crates/pp-execution" }
+pp-risk = { path = "crates/pp-risk" }
+pp-server = { path = "crates/pp-server" }
+
+[package]
+name = "polyprofit"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pp-core.workspace = true
+pp-feeds.workspace = true
+pp-discovery.workspace = true
+pp-strategy.workspace = true
+pp-execution.workspace = true
+pp-risk.workspace = true
+pp-server.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+polymarket-client-sdk.workspace = true
+alloy.workspace = true
+uuid.workspace = true
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"

@@ -1,0 +1,14 @@
+[package]
+name = "pp-strategy"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pp-core.workspace = true
+pp-risk = { workspace = true }
+tokio.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+chrono.workspace = true
