@@ -14,7 +14,7 @@ export default function Controls({
   onKill,
 }: Props) {
   return (
-    <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4 mt-6">
+    <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {/* Mode badge */}

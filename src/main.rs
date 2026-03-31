@@ -26,8 +26,43 @@ async fn main() -> Result<()> {
     let config = Arc::new(Config::load("config.toml")?);
     info!(mode = ?config.mode, "Config loaded");
 
-    let state = AppState::new(config.mode);
+    // ── Open embedded database ──
+    let db = pp_core::BotDb::open("polyprofit.db")?;
+
+    let state = AppState::new_with_db(config.mode, db);
     state.set_starting_balance(config.risk.starting_balance);
+
+    // Restore saved runtime config (or use initial from config.toml)
+    {
+        let saved_config = state.db.as_ref().and_then(|db| db.load_config().ok().flatten());
+        let mut rc = state.runtime_config.write();
+        if let Some(saved) = saved_config {
+            info!("Restored runtime config from database");
+            *rc = saved;
+        } else {
+            *rc = config.to_runtime_config();
+        }
+    }
+
+    // Restore balance checkpoint if available
+    if let Some(ref db) = state.db {
+        if let Ok(Some((pnl, peak))) = db.load_balance_checkpoint() {
+            state.daily_pnl.store(pnl, std::sync::atomic::Ordering::Relaxed);
+            state.peak_balance.store(peak, std::sync::atomic::Ordering::Relaxed);
+            info!(daily_pnl_cents = pnl, peak_cents = peak, "Balance checkpoint restored");
+        }
+    }
+
+    // Restore trade history
+    if let Some(ref db) = state.db {
+        if let Ok(trades) = db.load_trades() {
+            if !trades.is_empty() {
+                info!(count = trades.len(), "Trade history restored from database");
+                let mut tl = state.trades.write();
+                *tl = trades;
+            }
+        }
+    }
     let fee_cache = fee_cache::new_fee_cache();
 
     // ── SDK authentication (Live only) ──
@@ -65,9 +100,7 @@ async fn main() -> Result<()> {
     let assets = config.strategy.assets.clone();
     let assets_feed = assets.clone();
     let assets_discovery = assets.clone();
-    let refresh_secs = config.strategy.market_refresh_secs;
     let mode = config.mode;
-    let order_strategy = config.strategy.order_strategy;
     let server_config = config.clone();
     let signal_config = config.clone();
 
@@ -81,6 +114,7 @@ async fn main() -> Result<()> {
     let state_server = state.clone();
     let state_executor = state.clone();
     let state_fees = state.clone();
+    let state_checkpoint = state.clone();
 
     let clob_heartbeat = clob_client.clone();
     let clob_maker = clob_client.clone();
@@ -120,6 +154,9 @@ async fn main() -> Result<()> {
         // 5. Signal executor
         async move {
             while let Some(signal) = signal_rx.recv().await {
+                // Read order_strategy live from runtime_config so UI changes take effect
+                let order_strategy = state_executor.runtime_config.read().order_strategy;
+
                 let result = match mode {
                     Mode::Demo => {
                         pp_execution::orders::execute_demo(&state_executor, &signal).await
@@ -154,7 +191,7 @@ async fn main() -> Result<()> {
 
         // 7. Market discovery refresh
         async move {
-            pp_discovery::refresh_loop(state_discovery, assets_discovery, refresh_secs).await
+            pp_discovery::refresh_loop(state_discovery, assets_discovery).await
         },
 
         // 8. Auto-redeem resolved markets
@@ -170,6 +207,11 @@ async fn main() -> Result<()> {
         // 10. Fee rate cache refresh
         async move {
             fee_cache::fee_refresh_loop(fee_cache, state_fees, clob_fees).await
+        },
+
+        // 11. Periodic DB checkpoint (every 30s)
+        async move {
+            pp_core::db::checkpoint_loop(state_checkpoint, 30).await
         },
     )?;
 

@@ -15,19 +15,22 @@ use crate::fair_price;
 const SIGNAL_INTERVAL_MS: u64 = 500;
 
 /// Main signal generation loop. Scans all markets every 500ms.
+/// Reads strategy params from runtime_config each iteration so
+/// UI config changes take effect immediately.
 pub async fn signal_loop(
     state: Arc<AppState>,
-    config: &Config,
+    _config: &Config,
     risk: &RiskManager,
     signal_tx: tokio::sync::mpsc::Sender<Signal>,
 ) -> Result<()> {
-    let min_edge = config.strategy.min_edge;
-    let min_prob = config.strategy.min_prob;
-    let max_prob = config.strategy.max_prob;
-    let max_spread = config.strategy.max_spread;
-
     loop {
         tokio::time::sleep(std::time::Duration::from_millis(SIGNAL_INTERVAL_MS)).await;
+
+        // Read live params from runtime_config (hot-reloadable via API)
+        let (min_edge, min_prob, max_prob, max_spread) = {
+            let rc = state.runtime_config.read();
+            (rc.min_edge, rc.min_prob, rc.max_prob, rc.max_spread)
+        };
 
         // Pre-checks
         if let Err(reason) = risk.can_trade(&state) {
@@ -124,7 +127,7 @@ pub async fn signal_loop(
                 state.current_balance_cents().max(10000),
                 2,
             );
-            let size_usdc = risk.position_size(edge, balance);
+            let size_usdc = risk.position_size(edge, balance, &state);
 
             // Already have a position in this market?
             if state.positions.contains_key(&market.condition_id) {

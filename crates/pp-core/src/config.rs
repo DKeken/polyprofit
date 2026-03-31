@@ -1,7 +1,7 @@
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
-use crate::types::{Asset, Mode, OrderStrategy};
+use crate::types::{Asset, Mode, OrderStrategy, RuntimeConfig};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -111,5 +111,24 @@ impl Config {
         }
 
         Ok(())
+    }
+
+    /// Create a RuntimeConfig snapshot from the initial static config
+    pub fn to_runtime_config(&self) -> RuntimeConfig {
+        RuntimeConfig {
+            min_edge: self.strategy.min_edge,
+            min_prob: self.strategy.min_prob,
+            max_prob: self.strategy.max_prob,
+            max_spread: self.strategy.max_spread,
+            order_strategy: self.strategy.order_strategy,
+            market_refresh_secs: self.strategy.market_refresh_secs,
+            assets: self.strategy.assets.clone(),
+            daily_loss_limit: self.risk.daily_loss_limit,
+            daily_profit_cap: self.risk.daily_profit_cap,
+            max_position_pct: self.risk.max_position_pct,
+            max_concurrent: self.risk.max_concurrent,
+            drawdown_limit: self.risk.drawdown_limit,
+            adverse_fill_pause: self.risk.adverse_fill_pause,
+        }
     }
 }

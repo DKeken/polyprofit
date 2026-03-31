@@ -25,7 +25,7 @@ export default function PriceMonitor({ prices }: Props) {
 
   if (entries.length === 0) {
     return (
-      <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4 mb-6">
+      <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4">
         <h2 className="text-sm text-zinc-400 uppercase tracking-wider mb-3">
           Prices
         </h2>
@@ -37,7 +37,7 @@ export default function PriceMonitor({ prices }: Props) {
   }
 
   return (
-    <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4 mb-6">
+    <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4">
       <h2 className="text-sm text-zinc-400 uppercase tracking-wider mb-3">
         Prices
       </h2>

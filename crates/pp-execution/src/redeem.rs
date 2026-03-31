@@ -205,7 +205,14 @@ pub async fn redeem_loop(state: Arc<AppState>, client: Option<Arc<AuthClient>>) 
                     is_adverse: pnl.map(|p| p < Decimal::ZERO).unwrap_or(false),
                     timestamp: Utc::now(),
                 };
-                state.trades.write().push(trade);
+                state.trades.write().push(trade.clone());
+
+                // Persist to DB
+                if let Some(ref db) = state.db {
+                    if let Err(e) = db.insert_trade(&trade) {
+                        warn!(error = %e, "Failed to persist redemption trade to DB");
+                    }
+                }
             }
         }
     }

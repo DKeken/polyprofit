@@ -54,7 +54,14 @@ pub async fn execute_demo(state: &Arc<AppState>, signal: &Signal) -> Result<()> 
         timestamp: Utc::now(),
     };
 
-    state.trades.write().push(trade);
+    state.trades.write().push(trade.clone());
+
+    // Persist trade to DB
+    if let Some(ref db) = state.db {
+        if let Err(e) = db.insert_trade(&trade) {
+            tracing::warn!(error = %e, "Failed to persist trade to DB");
+        }
+    }
 
     info!(
         side = %signal.side,

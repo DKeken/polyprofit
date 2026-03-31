@@ -7,6 +7,7 @@ use axum::extract::{State, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use rust_decimal::Decimal;
 use tracing::{debug, warn};
+use ts_rs::TS;
 
 use pp_core::{AppState, Mode};
 
@@ -20,8 +21,20 @@ pub async fn ws_handler(
 async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     debug!("WebSocket client connected");
 
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+    let mut ping_counter: u64 = 0;
+
     loop {
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        interval.tick().await;
+        ping_counter += 1;
+
+        // Send a ping every 30s to detect dead connections
+        if ping_counter % 30 == 0 {
+            if socket.send(Message::Ping(vec![].into())).await.is_err() {
+                debug!("WebSocket client disconnected (ping failed)");
+                break;
+            }
+        }
 
         let tick = build_tick(&state);
         let json = match serde_json::to_string(&tick) {
@@ -39,14 +52,59 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     }
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, TS)]
+#[ts(export)]
 struct PriceInfo {
     binance: String,
     chainlink: String,
+    #[ts(type = "number")]
     lag_secs: i64,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, TS)]
+#[ts(export)]
+struct ConfigSnapshot {
+    min_edge: String,
+    min_prob: String,
+    max_prob: String,
+    max_spread: String,
+    order_strategy: String,
+    #[ts(type = "number")]
+    market_refresh_secs: u64,
+    daily_loss_limit: String,
+    daily_profit_cap: String,
+    max_position_pct: String,
+    max_concurrent: usize,
+    drawdown_limit: String,
+    adverse_fill_pause: u32,
+}
+
+#[derive(serde::Serialize, TS)]
+#[ts(export)]
+struct TradeInfo {
+    side: String,
+    price: String,
+    size: String,
+    pnl: Option<String>,
+    adverse: bool,
+    ts: String,
+    market: String,
+}
+
+#[derive(serde::Serialize, TS)]
+#[ts(export)]
+struct PositionInfo {
+    condition_id: String,
+    side: String,
+    size: String,
+    entry_price: String,
+    market: String,
+    #[ts(type = "number")]
+    age_secs: i64,
+}
+
+#[derive(serde::Serialize, TS)]
+#[ts(export)]
 struct Tick {
     // Existing fields
     daily_pnl: String,
@@ -55,20 +113,36 @@ struct Tick {
     positions: usize,
     orders: usize,
     markets: usize,
+    #[ts(type = "number")]
     signals: u64,
+    #[ts(type = "number")]
     fills: u64,
+    #[ts(type = "number")]
     adverse: u64,
+    #[ts(type = "number")]
     reconnects: u64,
-    trades: Vec<serde_json::Value>,
+    trades: Vec<TradeInfo>,
 
     // New fields
     balance: String,
     win_rate: f64,
+    #[ts(type = "number")]
     total_trades: u64,
+    #[ts(type = "number")]
     orders_placed: u64,
+    #[ts(type = "number")]
     orders_cancelled: u64,
     mode: String,
     prices: HashMap<String, PriceInfo>,
+    config: ConfigSnapshot,
+
+    // Phase 2 additions
+    drawdown_pct: f64,
+    #[ts(type = "number")]
+    uptime_secs: u64,
+
+    // Phase 3: positions view
+    open_positions: Vec<PositionInfo>,
 }
 
 fn build_tick(state: &Arc<AppState>) -> Tick {
@@ -88,7 +162,7 @@ fn build_tick(state: &Arc<AppState>) -> Tick {
     };
 
     // Recent 10 trades for display
-    let recent_trades: Vec<_> = trades
+    let recent_trades: Vec<TradeInfo> = trades
         .iter()
         .rev()
         .take(10)
@@ -98,23 +172,24 @@ fn build_tick(state: &Arc<AppState>) -> Tick {
                 .get(&t.condition_id)
                 .map(|m| {
                     let q = &m.question;
-                    if q.len() > 40 {
-                        format!("{}…", &q[..39])
+                    if q.chars().count() > 40 {
+                        let truncated: String = q.chars().take(39).collect();
+                        format!("{truncated}…")
                     } else {
                         q.clone()
                     }
                 })
                 .unwrap_or_default();
 
-            serde_json::json!({
-                "side": t.side,
-                "price": t.price.to_string(),
-                "size": t.size.to_string(),
-                "pnl": t.pnl.map(|p| p.to_string()),
-                "adverse": t.is_adverse,
-                "ts": t.timestamp.to_rfc3339(),
-                "market": market_name,
-            })
+            TradeInfo {
+                side: t.side.to_string(),
+                price: t.price.to_string(),
+                size: t.size.to_string(),
+                pnl: t.pnl.map(|p| p.to_string()),
+                adverse: t.is_adverse,
+                ts: t.timestamp.to_rfc3339(),
+                market: market_name,
+            }
         })
         .collect();
 
@@ -150,6 +225,24 @@ fn build_tick(state: &Arc<AppState>) -> Tick {
         Mode::Live => "Live",
     };
 
+    // Read runtime config snapshot
+    let rc = state.runtime_config.read();
+    let config_snap = ConfigSnapshot {
+        min_edge: rc.min_edge.to_string(),
+        min_prob: rc.min_prob.to_string(),
+        max_prob: rc.max_prob.to_string(),
+        max_spread: rc.max_spread.to_string(),
+        order_strategy: format!("{:?}", rc.order_strategy),
+        market_refresh_secs: rc.market_refresh_secs,
+        daily_loss_limit: rc.daily_loss_limit.to_string(),
+        daily_profit_cap: rc.daily_profit_cap.to_string(),
+        max_position_pct: rc.max_position_pct.to_string(),
+        max_concurrent: rc.max_concurrent,
+        drawdown_limit: rc.drawdown_limit.to_string(),
+        adverse_fill_pause: rc.adverse_fill_pause,
+    };
+    drop(rc);
+
     Tick {
         daily_pnl: state.daily_pnl_dec().to_string(),
         paused: state.is_paused(),
@@ -169,5 +262,56 @@ fn build_tick(state: &Arc<AppState>) -> Tick {
         orders_cancelled: state.metrics.orders_cancelled.load(Ordering::Relaxed),
         mode: mode_str.to_string(),
         prices,
+        config: config_snap,
+
+        // Drawdown: (peak - current) / peak as pct
+        drawdown_pct: {
+            let peak = state.peak_balance.load(Ordering::Relaxed);
+            if peak > 0 {
+                let cur = state.current_balance_cents();
+                if cur < peak {
+                    ((peak - cur) as f64) / (peak as f64)
+                } else {
+                    0.0
+                }
+            } else {
+                0.0
+            }
+        },
+        uptime_secs: state.started_at.elapsed().as_secs(),
+
+        // Open positions
+        open_positions: {
+            let now = chrono::Utc::now();
+            state
+                .positions
+                .iter()
+                .map(|entry| {
+                    let p = entry.value();
+                    let market_name = state
+                        .markets
+                        .get(&p.condition_id)
+                        .map(|m| {
+                            let q = &m.question;
+                            if q.chars().count() > 40 {
+                                let truncated: String = q.chars().take(39).collect();
+                                format!("{truncated}…")
+                            } else {
+                                q.clone()
+                            }
+                        })
+                        .unwrap_or_default();
+
+                    PositionInfo {
+                        condition_id: p.condition_id.0.clone(),
+                        side: p.side.to_string(),
+                        size: p.size.to_string(),
+                        entry_price: p.entry_price.to_string(),
+                        market: market_name,
+                        age_secs: (now - p.opened_at).num_seconds(),
+                    }
+                })
+                .collect()
+        },
     }
 }

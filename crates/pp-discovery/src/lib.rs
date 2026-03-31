@@ -106,9 +106,11 @@ pub async fn discover(state: &Arc<AppState>, assets: &[Asset]) -> Result<usize> 
     Ok(total)
 }
 
-/// Background loop: refresh markets periodically
-pub async fn refresh_loop(state: Arc<AppState>, assets: Vec<Asset>, interval_secs: u64) -> Result<()> {
+/// Background loop: refresh markets periodically.
+/// Reads interval from runtime_config so UI changes to market_refresh_secs take effect.
+pub async fn refresh_loop(state: Arc<AppState>, assets: Vec<Asset>) -> Result<()> {
     loop {
+        let interval_secs = state.runtime_config.read().market_refresh_secs.max(10);
         tokio::time::sleep(std::time::Duration::from_secs(interval_secs)).await;
 
         match discover(&state, &assets).await {

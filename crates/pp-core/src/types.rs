@@ -6,6 +6,7 @@ use dashmap::DashMap;
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 // ── Newtypes for type safety ──
 
@@ -15,8 +16,9 @@ pub struct TokenId(pub String);
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ConditionId(pub String);
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct Price(pub Decimal);
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Price(#[ts(as = "String")] pub Decimal);
 
 impl Price {
     pub fn new(val: Decimal) -> Self {
@@ -30,7 +32,8 @@ impl Price {
 
 // ── Asset & Market types ──
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub enum Asset {
     Btc,
     Eth,
@@ -60,7 +63,8 @@ impl std::fmt::Display for Asset {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub enum MarketKind {
     UpDown,
     FiveMin,
@@ -131,7 +135,8 @@ impl Default for Orderbook {
 
 // ── Signal ──
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub enum Side {
     Yes,
     No,
@@ -159,7 +164,8 @@ pub struct Signal {
 
 // ── Order strategy ──
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub enum OrderStrategy {
     Passive,
     Balanced,
@@ -206,7 +212,8 @@ pub struct TradeLog {
 
 // ── Bot mode ──
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub enum Mode {
     Demo,
     Live,
@@ -226,6 +233,60 @@ pub struct Metrics {
     pub heartbeat_failures: AtomicU64,
 }
 
+// ── Runtime Config (hot-reloadable via API) ──
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RuntimeConfig {
+    // Strategy
+    #[ts(as = "String")]
+    pub min_edge: Decimal,
+    #[ts(as = "String")]
+    pub min_prob: Decimal,
+    #[ts(as = "String")]
+    pub max_prob: Decimal,
+    #[ts(as = "String")]
+    pub max_spread: Decimal,
+    pub order_strategy: OrderStrategy,
+    #[ts(type = "number")]
+    pub market_refresh_secs: u64,
+    pub assets: Vec<Asset>,
+    // Risk
+    #[ts(as = "String")]
+    pub daily_loss_limit: Decimal,
+    #[ts(as = "String")]
+    pub daily_profit_cap: Decimal,
+    #[ts(as = "String")]
+    pub max_position_pct: Decimal,
+    pub max_concurrent: usize,
+    #[ts(as = "String")]
+    pub drawdown_limit: Decimal,
+    pub adverse_fill_pause: u32,
+}
+
+impl Default for RuntimeConfig {
+    fn default() -> Self {
+        use rust_decimal_macros::dec;
+        Self {
+            min_edge: dec!(0.05),
+            min_prob: dec!(0.15),
+            max_prob: dec!(0.85),
+            max_spread: dec!(0.06),
+            order_strategy: OrderStrategy::Passive,
+            market_refresh_secs: 60,
+            assets: vec![Asset::Btc, Asset::Eth, Asset::Sol, Asset::Xrp],
+            daily_loss_limit: dec!(-100),
+            daily_profit_cap: dec!(100000),
+            max_position_pct: dec!(0.05),
+            max_concurrent: 50,
+            drawdown_limit: dec!(0.20),
+            adverse_fill_pause: 3,
+        }
+    }
+}
+
+use crate::db::BotDb;
+
 // ── Shared App State ──
 
 #[derive(Debug)]
@@ -243,6 +304,9 @@ pub struct AppState {
     pub paused: AtomicBool,
     pub heartbeat_alive: AtomicBool,
     pub metrics: Metrics,
+    pub runtime_config: parking_lot::RwLock<RuntimeConfig>,
+    pub started_at: std::time::Instant,
+    pub db: Option<BotDb>,
 }
 
 impl AppState {
@@ -261,6 +325,31 @@ impl AppState {
             paused: AtomicBool::new(false),
             heartbeat_alive: AtomicBool::new(false),
             metrics: Metrics::default(),
+            runtime_config: parking_lot::RwLock::new(RuntimeConfig::default()),
+            started_at: std::time::Instant::now(),
+            db: None,
+        })
+    }
+
+    /// Create with an embedded database for persistence.
+    pub fn new_with_db(mode: Mode, db: BotDb) -> Arc<Self> {
+        Arc::new(Self {
+            mode,
+            prices: DashMap::new(),
+            orderbooks: DashMap::new(),
+            markets: DashMap::new(),
+            positions: DashMap::new(),
+            maker_orders: DashMap::new(),
+            trades: parking_lot::RwLock::new(Vec::new()),
+            daily_pnl: AtomicI64::new(0),
+            peak_balance: AtomicI64::new(0),
+            starting_balance: AtomicI64::new(0),
+            paused: AtomicBool::new(false),
+            heartbeat_alive: AtomicBool::new(false),
+            metrics: Metrics::default(),
+            runtime_config: parking_lot::RwLock::new(RuntimeConfig::default()),
+            started_at: std::time::Instant::now(),
+            db: Some(db),
         })
     }
 
@@ -319,6 +408,9 @@ impl Default for AppState {
             paused: AtomicBool::new(false),
             heartbeat_alive: AtomicBool::new(false),
             metrics: Metrics::default(),
+            runtime_config: parking_lot::RwLock::new(RuntimeConfig::default()),
+            started_at: std::time::Instant::now(),
+            db: None,
         }
     }
 }
