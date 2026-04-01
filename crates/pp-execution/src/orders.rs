@@ -54,14 +54,7 @@ pub async fn execute_demo(state: &Arc<AppState>, signal: &Signal) -> Result<()> 
         timestamp: Utc::now(),
     };
 
-    state.trades.write().push(trade.clone());
-
-    // Persist trade to DB
-    if let Some(ref db) = state.db {
-        if let Err(e) = db.insert_trade(&trade) {
-            tracing::warn!(error = %e, "Failed to persist trade to DB");
-        }
-    }
+    state.record_trade(&trade);
 
     info!(
         side = %signal.side,
@@ -281,13 +274,7 @@ async fn place_market_order<S: Signer + Send + Sync>(
         timestamp: Utc::now(),
     };
 
-    state.trades.write().push(trade.clone());
-
-    if let Some(ref db) = state.db {
-        if let Err(e) = db.insert_trade(&trade) {
-            tracing::warn!(error = %e, "Failed to persist aggressive trade to DB");
-        }
-    }
+    state.record_trade(&trade);
 
     info!(
         order_id = %response.order_id,

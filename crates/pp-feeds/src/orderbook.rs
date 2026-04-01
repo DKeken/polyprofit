@@ -39,6 +39,10 @@ struct PriceLevel {
 /// On each reconnect, re-reads state.markets so newly discovered markets get subscribed.
 pub async fn run_orderbook_feed(state: Arc<AppState>) -> Result<()> {
     loop {
+        if state.shutdown.is_cancelled() {
+            info!("Orderbook feed shutting down");
+            return Ok(());
+        }
         match connect_and_stream(&state).await {
             Ok(()) => {
                 info!("Orderbook WS ended cleanly, reconnecting...");
@@ -51,7 +55,13 @@ pub async fn run_orderbook_feed(state: Arc<AppState>) -> Result<()> {
                     .fetch_add(1, Ordering::Relaxed);
             }
         }
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        tokio::select! {
+            _ = state.shutdown.cancelled() => {
+                info!("Orderbook feed shutting down");
+                return Ok(());
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(3)) => {}
+        }
     }
 }
 

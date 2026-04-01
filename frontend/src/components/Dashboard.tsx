@@ -443,7 +443,7 @@ export default function Dashboard() {
             {/* ── Left: Live Feeds ── */}
             <div className="space-y-4">
               {/* Price Monitor */}
-              <PriceMonitor prices={tick.prices} />
+              <PriceMonitor prices={tick.prices} configAssets={tick.config.assets} />
 
               {/* Metrics Grid */}
               <div className="grid grid-cols-2 gap-2">

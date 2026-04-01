@@ -1,14 +1,24 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { api, type MarketInfo } from "../api";
 
-/* ── Color maps ── */
+/* ── Color palette — cycles for any number of assets ── */
 
-const ASSET_COLORS: Record<string, string> = {
-  BTC: "text-orange-400",
-  ETH: "text-blue-400",
-  SOL: "text-purple-400",
-  XRP: "text-cyan-400",
-};
+const PALETTE = [
+  "text-orange-400",
+  "text-blue-400",
+  "text-purple-400",
+  "text-cyan-400",
+  "text-pink-400",
+  "text-emerald-400",
+  "text-yellow-400",
+  "text-rose-400",
+  "text-indigo-400",
+  "text-teal-400",
+];
+
+function assetColor(_asset: string, idx: number): string {
+  return PALETTE[idx % PALETTE.length];
+}
 
 const KIND_BG: Record<string, string> = {
   UpDown: "bg-emerald-500/5",
@@ -20,7 +30,6 @@ const KIND_BG: Record<string, string> = {
   Range: "bg-indigo-500/5",
 };
 
-const ASSETS = ["All", "BTC", "ETH", "SOL", "XRP"] as const;
 const KINDS = [
   "All",
   "UpDown",
@@ -52,6 +61,7 @@ function formatEndsIn(endTime: string): string {
 export default function Markets() {
   const [markets, setMarkets] = useState<MarketInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [assetFilter, setAssetFilter] = useState("All");
@@ -70,27 +80,57 @@ export default function Markets() {
     }
   }, []);
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await api.refreshMarkets();
+      await fetchMarkets();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Refresh failed");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchMarkets]);
+
   useEffect(() => {
     fetchMarkets();
     const id = setInterval(fetchMarkets, 30_000);
     return () => clearInterval(id);
   }, [fetchMarkets]);
 
+  // Derive unique assets from actual market data — no hardcoded list
+  const uniqueAssets = useMemo(() => {
+    const set = new Set(markets.map((m) => m.asset));
+    return ["All", ...Array.from(set).sort()];
+  }, [markets]);
+
+  // Build asset→color mapping dynamically from discovered assets
+  const assetColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    uniqueAssets.forEach((a, i) => {
+      if (a !== "All") map[a] = assetColor(a, i - 1);
+    });
+    return map;
+  }, [uniqueAssets]);
+
+  // Reset filter if the selected asset is no longer in the list
+  useEffect(() => {
+    if (assetFilter !== "All" && !uniqueAssets.includes(assetFilter)) {
+      setAssetFilter("All");
+    }
+  }, [uniqueAssets, assetFilter]);
+
   /* ── Filter + sort ── */
   const filtered = markets
     .filter((m) => {
       if (assetFilter !== "All" && m.asset !== assetFilter) return false;
       if (kindFilter !== "All" && m.kind !== kindFilter) return false;
-      if (
-        search &&
-        !m.question.toLowerCase().includes(search.toLowerCase())
-      )
+      if (search && !m.question.toLowerCase().includes(search.toLowerCase()))
         return false;
       return true;
     })
     .sort(
-      (a, b) =>
-        new Date(a.end_time).getTime() - new Date(b.end_time).getTime(),
+      (a, b) => new Date(a.end_time).getTime() - new Date(b.end_time).getTime(),
     );
 
   return (
@@ -100,9 +140,18 @@ export default function Markets() {
         <h2 className="text-sm text-zinc-400 uppercase tracking-wider">
           Markets
         </h2>
-        <span className="text-xs text-zinc-600">
-          {filtered.length} / {markets.length} markets
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-zinc-600">
+            {filtered.length} / {markets.length} markets
+          </span>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="text-xs px-2 py-1 rounded border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {refreshing ? "Fetching…" : "↻ Refresh"}
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -112,7 +161,7 @@ export default function Markets() {
           onChange={(e) => setAssetFilter(e.target.value)}
           className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 outline-none focus:border-zinc-600"
         >
-          {ASSETS.map((a) => (
+          {uniqueAssets.map((a) => (
             <option key={a} value={a}>
               {a === "All" ? "All Assets" : a}
             </option>
@@ -171,7 +220,7 @@ export default function Markets() {
                   className={`border-b border-zinc-800/50 text-sm hover:bg-zinc-800/30 transition-colors ${KIND_BG[m.kind] ?? ""}`}
                 >
                   <td
-                    className={`py-2 pr-3 font-medium ${ASSET_COLORS[m.asset] ?? "text-zinc-300"}`}
+                    className={`py-2 pr-3 font-medium ${assetColorMap[m.asset] ?? "text-zinc-300"}`}
                   >
                     {m.asset}
                   </td>

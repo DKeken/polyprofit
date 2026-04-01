@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -11,74 +12,80 @@ use pp_core::{AppState, Asset, ConditionId, Market, MarketKind, TokenId};
 const GAMMA_API: &str = "https://gamma-api.polymarket.com";
 
 #[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct GammaMarket {
     #[serde(default)]
     condition_id: String,
     #[serde(default)]
     question: String,
+    /// Stringified JSON array of token IDs, e.g. `"[\"tok1\", \"tok2\"]"``
     #[serde(default)]
-    tokens: Vec<GammaToken>,
+    clob_token_ids: String,
+    /// Stringified JSON array of outcome labels, e.g. `"[\"Yes\", \"No\"]"``
     #[serde(default)]
-    end_date_iso: Option<String>,
+    outcomes: String,
+    /// Full RFC-3339 end datetime, e.g. `"2026-04-06T13:00:00Z"`
+    #[serde(default)]
+    end_date: Option<String>,
     #[serde(default)]
     active: bool,
     #[serde(default)]
     closed: bool,
 }
 
-#[derive(Debug, serde::Deserialize)]
-struct GammaToken {
-    #[serde(default)]
-    token_id: String,
-    #[serde(default)]
-    outcome: String,
-}
-
-/// Initial discovery: fetch all crypto markets from Gamma API.
-/// Fetches once, then filters locally per asset (avoids N identical HTTP requests).
+/// Initial discovery: fetch crypto markets from Gamma API via per-asset keyword search.
+/// One request per asset (e.g. q=btc, q=eth) to get relevant markets; deduplicates
+/// by condition_id and then applies data-driven keyword matching for final filtering.
 pub async fn discover(state: &Arc<AppState>, assets: &[Asset]) -> Result<usize> {
     let client = reqwest::Client::new();
     let mut total = 0;
 
-    // Single fetch — the Gamma API tag=crypto filter already narrows results
-    let url = format!(
-        "{GAMMA_API}/markets?tag=crypto&active=true&closed=false&limit=100&ascending=false&order=volume"
-    );
-    let resp = client.get(&url).send().await?;
-    let all_markets: Vec<GammaMarket> = resp.json().await?;
+    // Per-asset queries — asset symbol lowercased is the search term (btc, eth, sol, xrp).
+    // The Gamma API `tag=` filter is unreliable; `q=` keyword search works correctly.
+    let queries: Vec<String> = assets.iter().map(|a| a.0.to_lowercase()).collect();
+
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut all_markets: Vec<GammaMarket> = Vec::new();
+
+    for q in &queries {
+        let url = format!(
+            "{GAMMA_API}/markets?active=true&closed=false&limit=100&order=volume&q={q}"
+        );
+        let resp = match client.get(&url).send().await {
+            Ok(r) => r,
+            Err(e) => { warn!(q, error = %e, "Gamma API request failed"); continue; }
+        };
+        let markets: Vec<GammaMarket> = match resp.json().await {
+            Ok(m) => m,
+            Err(e) => { warn!(q, error = %e, "Gamma API parse failed"); continue; }
+        };
+        for m in markets {
+            if !m.condition_id.is_empty() && seen.insert(m.condition_id.clone()) {
+                all_markets.push(m);
+            }
+        }
+    }
 
     for gm in &all_markets {
-        if gm.condition_id.is_empty() || gm.tokens.len() < 2 {
+        let ids: Vec<String> = serde_json::from_str(&gm.clob_token_ids).unwrap_or_default();
+        if ids.len() < 2 {
             continue;
         }
 
-        // Match against ALL requested assets locally
         let question_lower = gm.question.to_lowercase();
-        let matched_asset = assets.iter().find(|asset| {
-            match asset {
-                Asset::Btc => {
-                    question_lower.contains("btc") || question_lower.contains("bitcoin")
-                }
-                Asset::Eth => {
-                    question_lower.contains("eth") || question_lower.contains("ethereum")
-                }
-                Asset::Sol => question_lower.contains("sol") || question_lower.contains("solana"),
-                Asset::Xrp => question_lower.contains("xrp") || question_lower.contains("ripple"),
-            }
-        });
+        let matched_asset = state.match_asset_by_keywords(&question_lower, assets);
 
         let asset = match matched_asset {
-            Some(a) => *a,
+            Some(a) => a,
             None => continue,
         };
 
         let kind = classify_market(&gm.question);
         let strike = extract_strike(&gm.question);
-
-        let (token_yes, token_no) = extract_tokens(&gm.tokens);
+        let (token_yes, token_no) = extract_tokens_from_clob(&gm.clob_token_ids, &gm.outcomes);
 
         let end_time = gm
-            .end_date_iso
+            .end_date
             .as_deref()
             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
             .map(|dt: DateTime<FixedOffset>| dt.with_timezone(&Utc))
@@ -111,7 +118,13 @@ pub async fn discover(state: &Arc<AppState>, assets: &[Asset]) -> Result<usize> 
 pub async fn refresh_loop(state: Arc<AppState>, assets: Vec<Asset>) -> Result<()> {
     loop {
         let interval_secs = state.runtime_config.read().market_refresh_secs.max(10);
-        tokio::time::sleep(std::time::Duration::from_secs(interval_secs)).await;
+        tokio::select! {
+            _ = state.shutdown.cancelled() => {
+                tracing::info!("Discovery refresh loop shutting down");
+                return Ok(());
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(interval_secs)) => {}
+        }
 
         match discover(&state, &assets).await {
             Ok(count) => {
@@ -166,23 +179,34 @@ fn extract_strike(question: &str) -> Option<Decimal> {
     re_like
 }
 
-fn extract_tokens(tokens: &[GammaToken]) -> (String, String) {
+/// Parse YES/NO token IDs from the Gamma API's stringified JSON fields.
+/// `clob_token_ids`: e.g. `"[\"tok1\", \"tok2\"]"``
+/// `outcomes`:       e.g. `"[\"Yes\", \"No\"]"`` or `"[\"Up\", \"Down\"]"``
+fn extract_tokens_from_clob(clob_token_ids: &str, outcomes: &str) -> (String, String) {
+    let ids: Vec<String> = serde_json::from_str(clob_token_ids).unwrap_or_default();
+    let outs: Vec<String> = serde_json::from_str(outcomes).unwrap_or_default();
+
     let mut yes = String::new();
     let mut no = String::new();
 
-    for t in tokens {
-        match t.outcome.to_lowercase().as_str() {
-            "yes" | "up" => yes = t.token_id.clone(),
-            "no" | "down" => no = t.token_id.clone(),
+    for (i, out) in outs.iter().enumerate() {
+        let id = ids.get(i).cloned().unwrap_or_default();
+        match out.to_lowercase().as_str() {
+            "yes" | "up" => yes = id,
+            "no" | "down" => no = id,
             _ => {
                 if yes.is_empty() {
-                    yes = t.token_id.clone();
-                } else {
-                    no = t.token_id.clone();
+                    yes = id;
+                } else if no.is_empty() {
+                    no = id;
                 }
             }
         }
     }
+
+    // Positional fallback when outcomes don't contain yes/no/up/down
+    if yes.is_empty() { yes = ids.get(0).cloned().unwrap_or_default(); }
+    if no.is_empty()  { no  = ids.get(1).cloned().unwrap_or_default(); }
 
     (yes, no)
 }
@@ -300,73 +324,41 @@ mod tests {
         assert_eq!(extract_strike("Worth $ nothing"), None);
     }
 
-    // ── extract_tokens ──
+    // ── extract_tokens_from_clob ──
 
     #[test]
     fn extract_tokens_yes_no() {
-        let tokens = vec![
-            GammaToken {
-                token_id: "tok_yes".into(),
-                outcome: "Yes".into(),
-            },
-            GammaToken {
-                token_id: "tok_no".into(),
-                outcome: "No".into(),
-            },
-        ];
-        let (yes, no) = extract_tokens(&tokens);
+        let ids  = r#"["tok_yes","tok_no"]"#;
+        let outs = r#"["Yes","No"]"#;
+        let (yes, no) = extract_tokens_from_clob(ids, outs);
         assert_eq!(yes, "tok_yes");
         assert_eq!(no, "tok_no");
     }
 
     #[test]
     fn extract_tokens_up_down() {
-        let tokens = vec![
-            GammaToken {
-                token_id: "tok_up".into(),
-                outcome: "Up".into(),
-            },
-            GammaToken {
-                token_id: "tok_down".into(),
-                outcome: "Down".into(),
-            },
-        ];
-        let (yes, no) = extract_tokens(&tokens);
+        let ids  = r#"["tok_up","tok_down"]"#;
+        let outs = r#"["Up","Down"]"#;
+        let (yes, no) = extract_tokens_from_clob(ids, outs);
         assert_eq!(yes, "tok_up");
         assert_eq!(no, "tok_down");
     }
 
     #[test]
     fn extract_tokens_arbitrary_outcomes() {
-        let tokens = vec![
-            GammaToken {
-                token_id: "tok_a".into(),
-                outcome: "Above".into(),
-            },
-            GammaToken {
-                token_id: "tok_b".into(),
-                outcome: "Below".into(),
-            },
-        ];
-        let (yes, no) = extract_tokens(&tokens);
-        // Neither matches yes/no/up/down, so first→yes, second→no
+        let ids  = r#"["tok_a","tok_b"]"#;
+        let outs = r#"["Above","Below"]"#;
+        let (yes, no) = extract_tokens_from_clob(ids, outs);
+        // Neither matches yes/no/up/down, so positional: first→yes, second→no
         assert_eq!(yes, "tok_a");
         assert_eq!(no, "tok_b");
     }
 
     #[test]
     fn extract_tokens_reversed_order() {
-        let tokens = vec![
-            GammaToken {
-                token_id: "tok_no".into(),
-                outcome: "No".into(),
-            },
-            GammaToken {
-                token_id: "tok_yes".into(),
-                outcome: "Yes".into(),
-            },
-        ];
-        let (yes, no) = extract_tokens(&tokens);
+        let ids  = r#"["tok_no","tok_yes"]"#;
+        let outs = r#"["No","Yes"]"#;
+        let (yes, no) = extract_tokens_from_clob(ids, outs);
         assert_eq!(yes, "tok_yes");
         assert_eq!(no, "tok_no");
     }

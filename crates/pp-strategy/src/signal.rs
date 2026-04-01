@@ -24,7 +24,13 @@ pub async fn signal_loop(
     signal_tx: tokio::sync::mpsc::Sender<Signal>,
 ) -> Result<()> {
     loop {
-        tokio::time::sleep(std::time::Duration::from_millis(SIGNAL_INTERVAL_MS)).await;
+        tokio::select! {
+            _ = state.shutdown.cancelled() => {
+                info!("Signal loop shutting down");
+                return Ok(());
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_millis(SIGNAL_INTERVAL_MS)) => {}
+        }
 
         // Read live params from runtime_config (hot-reloadable via API)
         let (min_edge, min_prob, max_prob, max_spread) = {

@@ -3,14 +3,29 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use axum::extract::State;
-use axum::http::{header, HeaderMap, HeaderValue};
+use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
+use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
 
-use pp_core::{AppState, RuntimeConfig};
+use pp_core::{AppState, Asset, RuntimeConfig};
+
+/// Standard API error response body.
+#[derive(Serialize)]
+struct ApiError {
+    error: String,
+}
+
+/// Shorthand for returning a 400 Bad Request with a JSON error message.
+fn bad_request(msg: impl Into<String>) -> (StatusCode, Json<ApiError>) {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ApiError { error: msg.into() }),
+    )
+}
 
 pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
@@ -18,6 +33,7 @@ pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/positions", get(positions))
         .route("/trades", get(trades))
         .route("/markets", get(markets))
+        .route("/markets/refresh", axum::routing::post(refresh_markets))
         .route("/db/stats", get(db_stats))
         .route("/pnl-history", get(pnl_history))
         .route("/analytics", get(analytics))
@@ -114,6 +130,28 @@ async fn markets(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> 
         })
     }).collect();
     Json(serde_json::json!({ "markets": markets }))
+}
+
+async fn refresh_markets(State(state): State<Arc<AppState>>) -> (StatusCode, Json<serde_json::Value>) {
+    let assets: Vec<Asset> = state
+        .runtime_config
+        .read()
+        .asset_definitions
+        .iter()
+        .map(|a| Asset::new(&a.symbol))
+        .collect();
+
+    match pp_discovery::discover(&state, &assets).await {
+        Ok(count) => {
+            let now = chrono::Utc::now();
+            state.markets.retain(|_, m| m.end_time > now && m.active);
+            (StatusCode::OK, Json(serde_json::json!({ "count": count })))
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        ),
+    }
 }
 
 async fn db_stats(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
@@ -389,6 +427,13 @@ async fn get_config(State(state): State<Arc<AppState>>) -> Json<RuntimeConfig> {
 }
 
 #[derive(Deserialize)]
+struct AssetDefUpdate {
+    symbol: String,
+    binance_symbol: String,
+    keywords: Vec<String>,
+}
+
+#[derive(Deserialize)]
 struct ConfigUpdate {
     #[serde(default)]
     min_edge: Option<String>,
@@ -416,17 +461,22 @@ struct ConfigUpdate {
     adverse_fill_pause: Option<u32>,
     #[serde(default)]
     assets: Option<Vec<String>>,
+    /// Full asset definitions — add/edit/remove via frontend Settings UI.
+    #[serde(default)]
+    asset_definitions: Option<Vec<AssetDefUpdate>>,
 }
 
 async fn update_config(
     State(state): State<Arc<AppState>>,
     Json(update): Json<ConfigUpdate>,
-) -> Json<serde_json::Value> {
+) -> impl IntoResponse {
     use std::str::FromStr;
 
     let mut cfg = state.runtime_config.write();
     let mut changes: Vec<String> = Vec::new();
 
+    // Helper macro: parse decimal field with optional range validation.
+    // Returns HTTP 400 on parse failure or out-of-range.
     macro_rules! update_decimal {
         ($field:ident, $name:expr) => {
             if let Some(ref val) = update.$field {
@@ -436,9 +486,7 @@ async fn update_config(
                         changes.push(format!("{}: {}", $name, d));
                     }
                     Err(_) => {
-                        return Json(serde_json::json!({
-                            "error": format!("Invalid value for {}: {}", $name, val)
-                        }));
+                        return bad_request(format!("Invalid value for {}: {}", $name, val)).into_response();
                     }
                 }
             }
@@ -450,17 +498,15 @@ async fn update_config(
                         let min_d: rust_decimal::Decimal = $min;
                         let max_d: rust_decimal::Decimal = $max;
                         if d < min_d || d > max_d {
-                            return Json(serde_json::json!({
-                                "error": format!("{} must be between {} and {}, got {}", $name, min_d, max_d, d)
-                            }));
+                            return bad_request(format!(
+                                "{} must be between {} and {}, got {}", $name, min_d, max_d, d
+                            )).into_response();
                         }
                         cfg.$field = d;
                         changes.push(format!("{}: {}", $name, d));
                     }
                     Err(_) => {
-                        return Json(serde_json::json!({
-                            "error": format!("Invalid value for {}: {}", $name, val)
-                        }));
+                        return bad_request(format!("Invalid value for {}: {}", $name, val)).into_response();
                     }
                 }
             }
@@ -478,20 +524,20 @@ async fn update_config(
 
     if let Some(ref strategy) = update.order_strategy {
         match strategy.as_str() {
-            "Passive" => { cfg.order_strategy = pp_core::OrderStrategy::Passive; changes.push(format!("order_strategy: Passive")); }
-            "Balanced" => { cfg.order_strategy = pp_core::OrderStrategy::Balanced; changes.push(format!("order_strategy: Balanced")); }
-            "Aggressive" => { cfg.order_strategy = pp_core::OrderStrategy::Aggressive; changes.push(format!("order_strategy: Aggressive")); }
+            "Passive" => { cfg.order_strategy = pp_core::OrderStrategy::Passive; changes.push("order_strategy: Passive".into()); }
+            "Balanced" => { cfg.order_strategy = pp_core::OrderStrategy::Balanced; changes.push("order_strategy: Balanced".into()); }
+            "Aggressive" => { cfg.order_strategy = pp_core::OrderStrategy::Aggressive; changes.push("order_strategy: Aggressive".into()); }
             _ => {
-                return Json(serde_json::json!({
-                    "error": format!("Invalid order_strategy: {}. Use: Passive, Balanced, Aggressive", strategy)
-                }));
+                return bad_request(format!(
+                    "Invalid order_strategy: {}. Use: Passive, Balanced, Aggressive", strategy
+                )).into_response();
             }
         }
     }
 
     if let Some(secs) = update.market_refresh_secs {
         if secs == 0 {
-            return Json(serde_json::json!({ "error": "market_refresh_secs must be > 0" }));
+            return bad_request("market_refresh_secs must be > 0").into_response();
         }
         cfg.market_refresh_secs = secs;
         changes.push(format!("market_refresh_secs: {}", secs));
@@ -499,7 +545,7 @@ async fn update_config(
 
     if let Some(mc) = update.max_concurrent {
         if mc == 0 {
-            return Json(serde_json::json!({ "error": "max_concurrent must be > 0" }));
+            return bad_request("max_concurrent must be > 0").into_response();
         }
         cfg.max_concurrent = mc;
         changes.push(format!("max_concurrent: {}", mc));
@@ -510,36 +556,95 @@ async fn update_config(
         changes.push(format!("adverse_fill_pause: {}", afp));
     }
 
-    // Assets update — use FromStr to avoid hardcoded matching
+    // Assets update — validate against asset registry
     if let Some(ref asset_list) = update.assets {
         if asset_list.is_empty() {
-            return Json(serde_json::json!({ "error": "assets list must not be empty" }));
+            return bad_request("assets list must not be empty").into_response();
         }
         let mut parsed = Vec::new();
         for name in asset_list {
-            match name.parse::<pp_core::Asset>() {
-                Ok(asset) => parsed.push(asset),
-                Err(e) => {
-                    return Json(serde_json::json!({ "error": e }));
-                }
+            let asset = pp_core::Asset::new(name);
+            // When asset_definitions is also being updated in the same request,
+            // validate against the new definitions, not the current registry
+            let is_valid = if let Some(ref new_defs) = update.asset_definitions {
+                new_defs.iter().any(|d| d.symbol.to_uppercase() == name.to_uppercase())
+            } else {
+                state.asset_registry.contains_key(&asset)
+            };
+            if !is_valid {
+                return bad_request(format!(
+                    "Unknown asset: '{}'. Add it to Asset Definitions first.", name
+                )).into_response();
             }
+            parsed.push(asset);
         }
         cfg.assets = parsed;
         changes.push(format!("assets: {:?}", asset_list));
     }
 
+    // Asset definitions update — full CRUD via frontend Settings UI
+    if let Some(ref def_list) = update.asset_definitions {
+        if def_list.is_empty() {
+            return bad_request("asset_definitions must not be empty").into_response();
+        }
+        // Validate each definition
+        for d in def_list {
+            if d.symbol.trim().is_empty() {
+                return bad_request("Asset symbol cannot be empty").into_response();
+            }
+            if d.binance_symbol.trim().is_empty() {
+                return bad_request(format!(
+                    "Binance symbol required for asset '{}'", d.symbol
+                )).into_response();
+            }
+            if d.keywords.is_empty() {
+                return bad_request(format!(
+                    "At least one keyword required for asset '{}'", d.symbol
+                )).into_response();
+            }
+        }
+        // Check for duplicate symbols
+        let mut seen = std::collections::HashSet::new();
+        for d in def_list {
+            let upper = d.symbol.to_uppercase();
+            if !seen.insert(upper.clone()) {
+                return bad_request(format!(
+                    "Duplicate asset symbol: '{}'", d.symbol
+                )).into_response();
+            }
+        }
+        cfg.asset_definitions = def_list.iter().map(|d| pp_core::AssetMeta {
+            symbol: d.symbol.to_uppercase(),
+            binance_symbol: d.binance_symbol.clone(),
+            keywords: d.keywords.iter().map(|k| k.to_lowercase()).collect(),
+        }).collect();
+        changes.push(format!("asset_definitions: {} assets", def_list.len()));
+
+        // Validate that all active assets still have a definition
+        let defined_symbols: Vec<String> = cfg.asset_definitions.iter()
+            .map(|d| d.symbol.clone())
+            .collect();
+        let invalid_active: Vec<String> = cfg.assets.iter()
+            .filter(|a| !defined_symbols.contains(&a.0))
+            .map(|a| a.0.clone())
+            .collect();
+        if !invalid_active.is_empty() {
+            // Auto-remove active assets that no longer have definitions
+            cfg.assets.retain(|a| defined_symbols.contains(&a.0));
+            changes.push(format!("auto-removed orphaned active assets: {:?}", invalid_active));
+        }
+    }
+
     // Cross-field validation: min_prob must be < max_prob
     if cfg.min_prob >= cfg.max_prob {
-        return Json(serde_json::json!({
-            "error": format!("min_prob ({}) must be less than max_prob ({})", cfg.min_prob, cfg.max_prob)
-        }));
+        return bad_request(format!(
+            "min_prob ({}) must be less than max_prob ({})", cfg.min_prob, cfg.max_prob
+        )).into_response();
     }
 
     // market_refresh_secs minimum floor
     if cfg.market_refresh_secs < 10 {
-        return Json(serde_json::json!({
-            "error": "market_refresh_secs must be >= 10"
-        }));
+        return bad_request("market_refresh_secs must be >= 10").into_response();
     }
 
     tracing::info!(changes = ?changes, "Config updated via API");
@@ -551,9 +656,16 @@ async fn update_config(
         }
     }
 
+    drop(cfg);
+
+    // Rebuild asset registry from updated definitions so changes take effect immediately
+    // (affects RTDS feed subscription, market discovery keyword matching, etc.)
+    state.rebuild_asset_registry();
+
+    let cfg = state.runtime_config.read();
     Json(serde_json::json!({
         "status": "updated",
         "changes": changes,
         "config": *cfg
-    }))
+    })).into_response()
 }

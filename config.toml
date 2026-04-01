@@ -8,7 +8,7 @@ max_prob = "0.85"
 max_spread = "0.06"
 order_strategy = "Passive"
 market_refresh_secs = 60
-assets = ["Btc", "Eth", "Sol", "Xrp"]
+assets = ["BTC", "ETH", "SOL", "XRP"]
 
 [risk]
 daily_loss_limit = "-100"
@@ -22,3 +22,28 @@ starting_balance = "1000"
 [server]
 port = 3000
 frontend_dist = "frontend/dist"
+
+# ── Asset Definitions ──
+# Each [[asset_definitions]] block maps a symbol to its Binance pair and
+# discovery keywords. To add a new asset (e.g. DOGE), just add a new block
+# here and include "DOGE" in strategy.assets above. Zero code changes needed.
+
+[[asset_definitions]]
+symbol = "BTC"
+binance_symbol = "BTCUSDT"
+keywords = ["btc", "bitcoin"]
+
+[[asset_definitions]]
+symbol = "ETH"
+binance_symbol = "ETHUSDT"
+keywords = ["eth", "ethereum"]
+
+[[asset_definitions]]
+symbol = "SOL"
+binance_symbol = "SOLUSDT"
+keywords = ["sol", "solana"]
+
+[[asset_definitions]]
+symbol = "XRP"
+binance_symbol = "XRPUSDT"
+keywords = ["xrp", "ripple"]

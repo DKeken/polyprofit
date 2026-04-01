@@ -9,7 +9,13 @@ use rust_decimal::Decimal;
 use tracing::{debug, warn};
 use ts_rs::TS;
 
-use pp_core::{AppState, Mode};
+use pp_core::{AppState, ConditionId, Mode};
+
+/// Maximum display length for market question text (chars).
+const QUESTION_DISPLAY_LEN: usize = 40;
+
+/// Number of recent trades to include in each WS tick.
+const RECENT_TRADES_LIMIT: usize = 10;
 
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
@@ -52,6 +58,8 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     }
 }
 
+// ── DTO Structs ──────────────────────────────────────────────────────────────
+
 #[derive(serde::Serialize, TS)]
 #[ts(export)]
 struct PriceInfo {
@@ -59,6 +67,14 @@ struct PriceInfo {
     chainlink: String,
     #[ts(type = "number")]
     lag_secs: i64,
+}
+
+#[derive(serde::Serialize, TS)]
+#[ts(export)]
+struct AssetDefInfo {
+    symbol: String,
+    binance_symbol: String,
+    keywords: Vec<String>,
 }
 
 #[derive(serde::Serialize, TS)]
@@ -78,6 +94,10 @@ struct ConfigSnapshot {
     drawdown_limit: String,
     adverse_fill_pause: u32,
     assets: Vec<String>,
+    /// All defined assets from registry (superset of active assets).
+    known_assets: Vec<String>,
+    /// Full asset definitions — frontend Settings UI uses this for CRUD.
+    asset_definitions: Vec<AssetDefInfo>,
 }
 
 #[derive(serde::Serialize, TS)]
@@ -107,7 +127,6 @@ struct PositionInfo {
 #[derive(serde::Serialize, TS)]
 #[ts(export)]
 struct Tick {
-    // Existing fields
     daily_pnl: String,
     paused: bool,
     heartbeat_alive: bool,
@@ -123,8 +142,6 @@ struct Tick {
     #[ts(type = "number")]
     reconnects: u64,
     trades: Vec<TradeInfo>,
-
-    // New fields
     balance: String,
     win_rate: f64,
     #[ts(type = "number")]
@@ -136,71 +153,51 @@ struct Tick {
     mode: String,
     prices: HashMap<String, PriceInfo>,
     config: ConfigSnapshot,
-
-    // Phase 2 additions
     drawdown_pct: f64,
     #[ts(type = "number")]
     uptime_secs: u64,
-
-    // Phase 3: positions view
     open_positions: Vec<PositionInfo>,
 }
 
-fn build_tick(state: &Arc<AppState>) -> Tick {
-    let trades = state.trades.read();
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-    // Compute win rate from realized trades (those with pnl set)
-    let realized: Vec<_> = trades.iter().filter(|t| t.pnl.is_some()).collect();
-    let total_realized = realized.len() as u64;
-    let wins = realized
-        .iter()
-        .filter(|t| t.pnl.map(|p| p > Decimal::ZERO).unwrap_or(false))
-        .count() as f64;
-    let win_rate = if total_realized > 0 {
-        wins / total_realized as f64
+/// Truncate a market question for display. Adds "…" if the question exceeds
+/// QUESTION_DISPLAY_LEN characters.
+fn truncate_question(question: &str) -> String {
+    if question.chars().count() > QUESTION_DISPLAY_LEN {
+        let truncated: String = question.chars().take(QUESTION_DISPLAY_LEN - 1).collect();
+        format!("{truncated}…")
+    } else {
+        question.to_string()
+    }
+}
+
+/// Look up a market question by condition_id and return a truncated display name.
+fn market_display_name(state: &AppState, condition_id: &ConditionId) -> String {
+    state
+        .markets
+        .get(condition_id)
+        .map(|m| truncate_question(&m.question))
+        .unwrap_or_default()
+}
+
+/// Calculate drawdown percentage: (peak - current) / peak.
+fn drawdown_pct(state: &AppState) -> f64 {
+    let peak = state.peak_balance.load(Ordering::Relaxed);
+    if peak > 0 {
+        let cur = state.current_balance_cents();
+        if cur < peak {
+            (peak - cur) as f64 / peak as f64
+        } else {
+            0.0
+        }
     } else {
         0.0
-    };
+    }
+}
 
-    // Recent 10 trades for display
-    let recent_trades: Vec<TradeInfo> = trades
-        .iter()
-        .rev()
-        .take(10)
-        .map(|t| {
-            let market_name = state
-                .markets
-                .get(&t.condition_id)
-                .map(|m| {
-                    let q = &m.question;
-                    if q.chars().count() > 40 {
-                        let truncated: String = q.chars().take(39).collect();
-                        format!("{truncated}…")
-                    } else {
-                        q.clone()
-                    }
-                })
-                .unwrap_or_default();
-
-            TradeInfo {
-                side: t.side.to_string(),
-                price: t.price.to_string(),
-                size: t.size.to_string(),
-                pnl: t.pnl.map(|p| p.to_string()),
-                adverse: t.is_adverse,
-                ts: t.timestamp.to_rfc3339(),
-                market: market_name,
-            }
-        })
-        .collect();
-
-    drop(trades);
-
-    // Balance formatted as dollars (cents → dollars)
-    let balance_cents = state.current_balance_cents();
-    let balance = format!("{:.2}", balance_cents as f64 / 100.0);
-
-    // Per-asset prices with oracle lag calculation
+/// Build per-asset price snapshot with oracle lag calculation.
+fn build_prices(state: &AppState) -> HashMap<String, PriceInfo> {
     let now_ts = chrono::Utc::now().timestamp();
     let mut prices = HashMap::new();
     for entry in state.prices.iter() {
@@ -220,15 +217,13 @@ fn build_tick(state: &Arc<AppState>) -> Tick {
             },
         );
     }
+    prices
+}
 
-    let mode_str = match state.mode {
-        Mode::Demo => "Demo",
-        Mode::Live => "Live",
-    };
-
-    // Read runtime config snapshot
+/// Snapshot current RuntimeConfig for WS tick.
+fn build_config_snapshot(state: &AppState) -> ConfigSnapshot {
     let rc = state.runtime_config.read();
-    let config_snap = ConfigSnapshot {
+    ConfigSnapshot {
         min_edge: rc.min_edge.to_string(),
         min_prob: rc.min_prob.to_string(),
         max_prob: rc.max_prob.to_string(),
@@ -242,8 +237,79 @@ fn build_tick(state: &Arc<AppState>) -> Tick {
         drawdown_limit: rc.drawdown_limit.to_string(),
         adverse_fill_pause: rc.adverse_fill_pause,
         assets: rc.assets.iter().map(|a| a.to_string()).collect(),
+        known_assets: state.asset_registry.iter().map(|e| e.key().to_string()).collect(),
+        asset_definitions: rc.asset_definitions.iter().map(|d| AssetDefInfo {
+            symbol: d.symbol.clone(),
+            binance_symbol: d.binance_symbol.clone(),
+            keywords: d.keywords.clone(),
+        }).collect(),
+    }
+}
+
+/// Build open positions list for WS tick.
+fn build_open_positions(state: &AppState) -> Vec<PositionInfo> {
+    let now = chrono::Utc::now();
+    state
+        .positions
+        .iter()
+        .map(|entry| {
+            let p = entry.value();
+            PositionInfo {
+                condition_id: p.condition_id.0.clone(),
+                side: p.side.to_string(),
+                size: p.size.to_string(),
+                entry_price: p.entry_price.to_string(),
+                market: market_display_name(state, &p.condition_id),
+                age_secs: (now - p.opened_at).num_seconds(),
+            }
+        })
+        .collect()
+}
+
+// ── Tick Builder ─────────────────────────────────────────────────────────────
+
+fn build_tick(state: &Arc<AppState>) -> Tick {
+    let trades = state.trades.read();
+
+    // Compute win rate from realized trades (those with pnl set)
+    let realized: Vec<_> = trades.iter().filter(|t| t.pnl.is_some()).collect();
+    let total_realized = realized.len() as u64;
+    let wins = realized
+        .iter()
+        .filter(|t| t.pnl.map(|p| p > Decimal::ZERO).unwrap_or(false))
+        .count() as f64;
+    let win_rate = if total_realized > 0 {
+        wins / total_realized as f64
+    } else {
+        0.0
     };
-    drop(rc);
+
+    // Recent trades for display
+    let recent_trades: Vec<TradeInfo> = trades
+        .iter()
+        .rev()
+        .take(RECENT_TRADES_LIMIT)
+        .map(|t| TradeInfo {
+            side: t.side.to_string(),
+            price: t.price.to_string(),
+            size: t.size.to_string(),
+            pnl: t.pnl.map(|p| p.to_string()),
+            adverse: t.is_adverse,
+            ts: t.timestamp.to_rfc3339(),
+            market: market_display_name(state, &t.condition_id),
+        })
+        .collect();
+
+    drop(trades);
+
+    // Balance formatted as dollars (cents → dollars)
+    let balance_cents = state.current_balance_cents();
+    let balance = format!("{:.2}", balance_cents as f64 / 100.0);
+
+    let mode_str = match state.mode {
+        Mode::Demo => "Demo",
+        Mode::Live => "Live",
+    };
 
     Tick {
         daily_pnl: state.daily_pnl_dec().to_string(),
@@ -263,57 +329,10 @@ fn build_tick(state: &Arc<AppState>) -> Tick {
         orders_placed: state.metrics.orders_placed.load(Ordering::Relaxed),
         orders_cancelled: state.metrics.orders_cancelled.load(Ordering::Relaxed),
         mode: mode_str.to_string(),
-        prices,
-        config: config_snap,
-
-        // Drawdown: (peak - current) / peak as pct
-        drawdown_pct: {
-            let peak = state.peak_balance.load(Ordering::Relaxed);
-            if peak > 0 {
-                let cur = state.current_balance_cents();
-                if cur < peak {
-                    ((peak - cur) as f64) / (peak as f64)
-                } else {
-                    0.0
-                }
-            } else {
-                0.0
-            }
-        },
+        prices: build_prices(state),
+        config: build_config_snapshot(state),
+        drawdown_pct: drawdown_pct(state),
         uptime_secs: state.started_at.elapsed().as_secs(),
-
-        // Open positions
-        open_positions: {
-            let now = chrono::Utc::now();
-            state
-                .positions
-                .iter()
-                .map(|entry| {
-                    let p = entry.value();
-                    let market_name = state
-                        .markets
-                        .get(&p.condition_id)
-                        .map(|m| {
-                            let q = &m.question;
-                            if q.chars().count() > 40 {
-                                let truncated: String = q.chars().take(39).collect();
-                                format!("{truncated}…")
-                            } else {
-                                q.clone()
-                            }
-                        })
-                        .unwrap_or_default();
-
-                    PositionInfo {
-                        condition_id: p.condition_id.0.clone(),
-                        side: p.side.to_string(),
-                        size: p.size.to_string(),
-                        entry_price: p.entry_price.to_string(),
-                        market: market_name,
-                        age_secs: (now - p.opened_at).num_seconds(),
-                    }
-                })
-                .collect()
-        },
+        open_positions: build_open_positions(state),
     }
 }

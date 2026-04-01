@@ -1,7 +1,5 @@
 import type { PriceInfo } from "../hooks/useBot";
 
-const ASSET_ORDER = ["BTC", "ETH", "SOL", "XRP"];
-
 function lagColor(lag: number): string {
   if (lag < 0) return "bg-zinc-600";
   if (lag < 30) return "bg-emerald-400";
@@ -16,12 +14,18 @@ function lagText(lag: number): string {
 
 interface Props {
   prices: Record<string, PriceInfo>;
+  /** Active assets from config — used for ordering. Falls back to prices keys. */
+  configAssets?: string[];
 }
 
-export default function PriceMonitor({ prices }: Props) {
-  const entries = ASSET_ORDER
-    .filter((a) => a in prices)
-    .map((a) => [a, prices[a]] as const);
+export default function PriceMonitor({ prices, configAssets }: Props) {
+  // Order by config assets first (preserves backend ordering), then any extra price keys
+  const priceKeys = Object.keys(prices);
+  const ordered = configAssets && configAssets.length > 0
+    ? [...configAssets.filter((a) => a in prices), ...priceKeys.filter((k) => !configAssets.includes(k))]
+    : priceKeys.sort();
+
+  const entries = ordered.map((a) => [a, prices[a]] as const);
 
   if (entries.length === 0) {
     return (

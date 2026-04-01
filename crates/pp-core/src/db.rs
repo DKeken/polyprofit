@@ -11,8 +11,8 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
-use redb::{Database, ReadableTable, ReadableTableMetadata, TableDefinition};
+use anyhow::{Context, Result, bail};
+use redb::{Database, DatabaseError, ReadableTable, ReadableTableMetadata, TableDefinition};
 use tracing::{debug, info, warn};
 
 use crate::types::{RuntimeConfig, TradeLog};
@@ -42,9 +42,10 @@ impl std::fmt::Debug for BotDb {
 
 impl BotDb {
     /// Open (or create) the database file.
+    /// Retries for up to 5 seconds if the DB is locked by a previous process.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        let db = Database::create(path.as_ref())
-            .with_context(|| format!("Failed to open DB at {:?}", path.as_ref()))?;
+        let path = path.as_ref();
+        let db = Self::open_with_retry(path)?;
 
         // Ensure tables exist (no-op if already created)
         let txn = db.begin_write()?;
@@ -55,8 +56,28 @@ impl BotDb {
         }
         txn.commit()?;
 
-        info!(path = %path.as_ref().display(), "Database opened");
+        info!(path = %path.display(), "Database opened");
         Ok(Self { db })
+    }
+
+    fn open_with_retry(path: &Path) -> Result<Database> {
+        const MAX_WAIT_MS: u64 = 5_000;
+        const STEP_MS: u64 = 200;
+        let mut waited = 0u64;
+        loop {
+            match Database::create(path) {
+                Ok(db) => return Ok(db),
+                Err(DatabaseError::DatabaseAlreadyOpen) if waited < MAX_WAIT_MS => {
+                    warn!(
+                        waited_ms = waited,
+                        "DB locked by previous process, retrying in {}ms…", STEP_MS
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(STEP_MS));
+                    waited += STEP_MS;
+                }
+                Err(e) => bail!("Failed to open DB at {:?}: {e}", path),
+            }
+        }
     }
 
     // ── Trades ──
@@ -214,45 +235,57 @@ impl BotDb {
 
 /// Periodic checkpoint task — saves state every N seconds.
 /// Also handles daily PnL reset at midnight UTC.
+/// Exits cleanly when the shutdown token is cancelled.
 pub async fn checkpoint_loop(state: Arc<crate::AppState>, interval_secs: u64) -> Result<()> {
     use std::sync::atomic::Ordering;
 
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+
     loop {
-        tokio::time::sleep(std::time::Duration::from_secs(interval_secs)).await;
-
-        if let Some(ref db) = state.db {
-            // ── Daily PnL reset check ──
-            let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-            let saved_date = db.load_trading_date().unwrap_or(None);
-
-            if saved_date.as_deref() != Some(&today) {
-                // New trading day — reset daily PnL
-                let old_pnl = state.daily_pnl.swap(0, Ordering::Relaxed);
-                // Update peak to current balance (start fresh)
-                let current = state.current_balance_cents();
-                state.peak_balance.store(current, Ordering::Relaxed);
-                // Update starting_balance to current balance for today
-                state.starting_balance.store(current, Ordering::Relaxed);
-
-                if let Err(e) = db.save_trading_date(&today) {
-                    warn!("Failed to save trading date: {e}");
+        tokio::select! {
+            _ = state.shutdown.cancelled() => {
+                // Final checkpoint before exit
+                if let Some(ref db) = state.db {
+                    let pnl = state.daily_pnl.load(Ordering::Relaxed);
+                    let peak = state.peak_balance.load(Ordering::Relaxed);
+                    let _ = db.checkpoint_balance(pnl, peak);
+                    info!("Final DB checkpoint on shutdown");
                 }
-
-                if old_pnl != 0 {
-                    info!(
-                        old_pnl_cents = old_pnl,
-                        new_starting_balance_cents = current,
-                        "Daily PnL reset (new trading day)"
-                    );
-                }
+                return Ok(());
             }
+            _ = interval.tick() => {
+                if let Some(ref db) = state.db {
+                    // ── Daily PnL reset check ──
+                    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+                    let saved_date = db.load_trading_date().unwrap_or(None);
 
-            // ── Regular checkpoint ──
-            let pnl = state.daily_pnl.load(Ordering::Relaxed);
-            let peak = state.peak_balance.load(Ordering::Relaxed);
+                    if saved_date.as_deref() != Some(&today) {
+                        let old_pnl = state.daily_pnl.swap(0, Ordering::Relaxed);
+                        let current = state.current_balance_cents();
+                        state.peak_balance.store(current, Ordering::Relaxed);
+                        state.starting_balance.store(current, Ordering::Relaxed);
 
-            if let Err(e) = db.checkpoint_balance(pnl, peak) {
-                warn!("Balance checkpoint failed: {e}");
+                        if let Err(e) = db.save_trading_date(&today) {
+                            warn!("Failed to save trading date: {e}");
+                        }
+
+                        if old_pnl != 0 {
+                            info!(
+                                old_pnl_cents = old_pnl,
+                                new_starting_balance_cents = current,
+                                "Daily PnL reset (new trading day)"
+                            );
+                        }
+                    }
+
+                    // ── Regular checkpoint ──
+                    let pnl = state.daily_pnl.load(Ordering::Relaxed);
+                    let peak = state.peak_balance.load(Ordering::Relaxed);
+
+                    if let Err(e) = db.checkpoint_balance(pnl, peak) {
+                        warn!("Balance checkpoint failed: {e}");
+                    }
+                }
             }
         }
     }

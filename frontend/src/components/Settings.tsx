@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import type { BotConfig } from "../hooks/useBot";
-
-const ALL_ASSETS = ["BTC", "ETH", "SOL", "XRP"] as const;
+import type { AssetDefInfo } from "@server-bindings/AssetDefInfo";
 
 interface Props {
   config: BotConfig;
-  onSave: (updates: Record<string, string | number | string[]>) => Promise<unknown>;
+  onSave: (updates: Record<string, unknown>) => Promise<unknown>;
 }
 
 interface FieldDef {
@@ -34,9 +33,12 @@ const FIELDS: FieldDef[] = [
   { key: "adverse_fill_pause", label: "Adverse Pause", group: "risk", type: "integer", hint: "Pause after N adverse fills" },
 ];
 
+const EMPTY_DEF: AssetDefInfo = { symbol: "", binance_symbol: "", keywords: [] };
+
 export default function Settings({ config, onSave }: Props) {
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [draftAssets, setDraftAssets] = useState<string[]>([]);
+  const [draftDefs, setDraftDefs] = useState<AssetDefInfo[]>([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -48,7 +50,13 @@ export default function Settings({ config, onSave }: Props) {
     }
     setDraft(d);
     setDraftAssets([...config.assets]);
+    if (config.asset_definitions?.length) {
+      setDraftDefs(config.asset_definitions.map((d) => ({ ...d })));
+    }
   }, [config]);
+
+  // Known assets = all symbols from definitions (draft version for real-time)
+  const knownAssets = draftDefs.map((d) => d.symbol).filter(Boolean);
 
   const fieldChanged = FIELDS.filter(
     (f) => draft[f.key] !== undefined && draft[f.key] !== String(config[f.key]),
@@ -58,7 +66,12 @@ export default function Settings({ config, onSave }: Props) {
     JSON.stringify([...draftAssets].sort()) !==
     JSON.stringify([...config.assets].sort());
 
-  const totalChanges = fieldChanged.length + (assetsChanged ? 1 : 0);
+  const defsChanged =
+    JSON.stringify(draftDefs) !==
+    JSON.stringify(config.asset_definitions ?? []);
+
+  const totalChanges =
+    fieldChanged.length + (assetsChanged ? 1 : 0) + (defsChanged ? 1 : 0);
 
   function toggleAsset(asset: string) {
     setDraftAssets((prev) =>
@@ -68,11 +81,33 @@ export default function Settings({ config, onSave }: Props) {
     );
   }
 
+  function updateDef(idx: number, field: keyof AssetDefInfo, value: string | string[]) {
+    setDraftDefs((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: value };
+      return next;
+    });
+  }
+
+  function addDef() {
+    setDraftDefs((prev) => [...prev, { ...EMPTY_DEF }]);
+  }
+
+  function removeDef(idx: number) {
+    const symbol = draftDefs[idx].symbol;
+    setDraftDefs((prev) => prev.filter((_, i) => i !== idx));
+    // Also remove from active assets if present
+    if (symbol) {
+      setDraftAssets((prev) => prev.filter((a) => a !== symbol));
+    }
+  }
+
   async function handleSave() {
     if (totalChanges === 0) return;
     setSaving(true);
     setMsg("");
-    const updates: Record<string, string | number | string[]> = {};
+
+    const updates: Record<string, unknown> = {};
     for (const f of fieldChanged) {
       const val = draft[f.key];
       if (f.type === "integer") {
@@ -84,8 +119,19 @@ export default function Settings({ config, onSave }: Props) {
     if (assetsChanged) {
       updates.assets = draftAssets;
     }
+    if (defsChanged) {
+      updates.asset_definitions = draftDefs.map((d) => ({
+        symbol: d.symbol.trim().toUpperCase(),
+        binance_symbol: d.binance_symbol.trim().toUpperCase(),
+        keywords: d.keywords.map((k) => k.trim().toLowerCase()).filter(Boolean),
+      }));
+    }
+
     try {
-      const res = await onSave(updates) as { error?: string; changes?: string[] };
+      const res = (await onSave(updates)) as {
+        error?: string;
+        changes?: string[];
+      };
       if (res.error) {
         setMsg(`Error: ${res.error}`);
       } else {
@@ -164,30 +210,123 @@ export default function Settings({ config, onSave }: Props) {
         {riskFields.map(renderField)}
       </div>
 
-      {/* Assets */}
+      {/* Asset Definitions — full CRUD */}
+      <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm text-zinc-400 uppercase tracking-wider">
+            Asset Definitions
+          </h3>
+          <button
+            onClick={addDef}
+            className="px-3 py-1 rounded text-xs font-medium bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors"
+          >
+            + Add Asset
+          </button>
+        </div>
+        <p className="text-zinc-600 text-xs mb-3">
+          Define crypto assets with their Binance pair and discovery keywords.
+          Changes are saved to the database — no config file editing needed.
+        </p>
+
+        {draftDefs.length === 0 ? (
+          <p className="text-zinc-600 text-sm">No assets defined. Click "+ Add Asset" to start.</p>
+        ) : (
+          <div className="space-y-3">
+            {draftDefs.map((def, idx) => (
+              <div
+                key={idx}
+                className="bg-zinc-800/50 rounded-lg border border-zinc-700/50 p-3"
+              >
+                <div className="flex items-start gap-3">
+                  {/* Symbol */}
+                  <div className="flex-1 min-w-0">
+                    <label className="text-xs text-zinc-500 block mb-1">Symbol</label>
+                    <input
+                      type="text"
+                      value={def.symbol}
+                      onChange={(e) => updateDef(idx, "symbol", e.target.value)}
+                      placeholder="BTC"
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500 uppercase"
+                    />
+                  </div>
+                  {/* Binance Symbol */}
+                  <div className="flex-1 min-w-0">
+                    <label className="text-xs text-zinc-500 block mb-1">Binance Pair</label>
+                    <input
+                      type="text"
+                      value={def.binance_symbol}
+                      onChange={(e) => updateDef(idx, "binance_symbol", e.target.value)}
+                      placeholder="BTCUSDT"
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500 uppercase"
+                    />
+                  </div>
+                  {/* Remove button */}
+                  <div className="pt-5">
+                    <button
+                      onClick={() => removeDef(idx)}
+                      className="px-2 py-1.5 rounded text-xs text-red-400 hover:bg-red-500/20 transition-colors"
+                      title="Remove asset"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                {/* Keywords */}
+                <div className="mt-2">
+                  <label className="text-xs text-zinc-500 block mb-1">
+                    Keywords <span className="text-zinc-600">— comma-separated, for market discovery</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={def.keywords.join(", ")}
+                    onChange={(e) =>
+                      updateDef(
+                        idx,
+                        "keywords",
+                        e.target.value.split(",").map((k) => k.trim()).filter(Boolean),
+                      )
+                    }
+                    placeholder="btc, bitcoin"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Active Assets — toggle buttons from definitions */}
       <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4">
         <h3 className="text-sm text-zinc-400 uppercase tracking-wider mb-3">
-          Assets
+          Active Assets
         </h3>
-        <div className="flex flex-wrap gap-2">
-          {ALL_ASSETS.map((asset) => {
-            const active = draftAssets.includes(asset);
-            return (
-              <button
-                key={asset}
-                onClick={() => toggleAsset(asset)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
-                  active
-                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-800"
-                    : "bg-zinc-800 text-zinc-500 border-zinc-700 hover:text-zinc-300"
-                }`}
-              >
-                {asset}
-              </button>
-            );
-          })}
-        </div>
-        {draftAssets.length === 0 && (
+        <p className="text-zinc-600 text-xs mb-2">
+          Select which defined assets the bot should actively trade.
+        </p>
+        {knownAssets.length === 0 ? (
+          <p className="text-zinc-600 text-sm">Add asset definitions above first.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {knownAssets.map((asset) => {
+              const active = draftAssets.includes(asset);
+              return (
+                <button
+                  key={asset}
+                  onClick={() => toggleAsset(asset)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+                    active
+                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-800"
+                      : "bg-zinc-800 text-zinc-500 border-zinc-700 hover:text-zinc-300"
+                  }`}
+                >
+                  {asset}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {draftAssets.length === 0 && knownAssets.length > 0 && (
           <p className="text-red-400 text-xs mt-2">At least one asset required</p>
         )}
       </div>

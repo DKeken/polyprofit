@@ -16,7 +16,13 @@ pub async fn heartbeat_monitor(client: Arc<AuthClient>, state: Arc<AppState>) ->
     info!("Heartbeat monitor started (checking every {MONITOR_INTERVAL_SECS}s)");
 
     loop {
-        tokio::time::sleep(std::time::Duration::from_secs(MONITOR_INTERVAL_SECS)).await;
+        tokio::select! {
+            _ = state.shutdown.cancelled() => {
+                info!("Heartbeat monitor shutting down");
+                return Ok(());
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(MONITOR_INTERVAL_SECS)) => {}
+        }
 
         let active = client.heartbeats_active();
         let was_alive = state.heartbeat_alive.swap(active, Ordering::Relaxed);
@@ -36,6 +42,12 @@ pub async fn heartbeat_demo(state: Arc<AppState>) -> Result<()> {
     state.heartbeat_alive.store(true, Ordering::Relaxed);
 
     loop {
-        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+        tokio::select! {
+            _ = state.shutdown.cancelled() => {
+                info!("Heartbeat demo shutting down");
+                return Ok(());
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {}
+        }
     }
 }

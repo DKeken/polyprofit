@@ -15,6 +15,7 @@ dashmap.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 parking_lot = "0.12"
+tokio-util = "0.7"
 toml = "0.8"
 redb = "2.4"
 ts-rs = { version = "12", features = ["chrono-impl", "serde-json-impl"] }

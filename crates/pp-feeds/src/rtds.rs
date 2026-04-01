@@ -37,6 +37,10 @@ struct RtdsPriceData {
 /// Reconnects automatically on failure.
 pub async fn run_rtds_feed(state: Arc<AppState>, assets: Vec<Asset>) -> Result<()> {
     loop {
+        if state.shutdown.is_cancelled() {
+            info!("RTDS feed shutting down");
+            return Ok(());
+        }
         match connect_and_stream(&state, &assets).await {
             Ok(()) => {
                 info!("RTDS stream ended cleanly, reconnecting...");
@@ -49,7 +53,13 @@ pub async fn run_rtds_feed(state: Arc<AppState>, assets: Vec<Asset>) -> Result<(
                     .fetch_add(1, Ordering::Relaxed);
             }
         }
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        tokio::select! {
+            _ = state.shutdown.cancelled() => {
+                info!("RTDS feed shutting down");
+                return Ok(());
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(3)) => {}
+        }
     }
 }
 
@@ -63,8 +73,10 @@ async fn connect_and_stream(state: &Arc<AppState>, assets: &[Asset]) -> Result<(
 
     let (mut _write, mut read) = ws.split();
 
-    // Build subscription message for all assets
-    let symbols: Vec<String> = assets.iter().map(|a| a.binance_symbol().to_string()).collect();
+    // Build subscription message for all assets using registry
+    let symbols: Vec<String> = assets.iter().filter_map(|a| {
+        state.asset_registry.get(a).map(|meta| meta.binance_symbol.clone())
+    }).collect();
     let sub_msg = serde_json::json!({
         "type": "subscribe",
         "channels": ["crypto_prices"],
@@ -118,16 +130,11 @@ fn handle_rtds_message(state: &Arc<AppState>, text: &str) -> Result<()> {
         let price: Decimal = price_str.parse()?;
         let ts = data.timestamp.unwrap_or(0);
 
-        // Match symbol to asset
-        let asset = match data.symbol.as_str() {
-            "BTCUSDT" | "BTC" => Some(Asset::Btc),
-            "ETHUSDT" | "ETH" => Some(Asset::Eth),
-            "SOLUSDT" | "SOL" => Some(Asset::Sol),
-            "XRPUSDT" | "XRP" => Some(Asset::Xrp),
-            _ => None,
-        };
+        // Match symbol to asset using data-driven registry lookup
+        let asset = state.asset_from_binance_symbol(&data.symbol);
 
         if let Some(asset) = asset {
+            let asset_display = asset.to_string();
             let mut entry = state.prices.entry(asset).or_insert_with(PriceState::default);
             let ps = entry.value_mut();
 
@@ -144,7 +151,7 @@ fn handle_rtds_message(state: &Arc<AppState>, text: &str) -> Result<()> {
             }
 
             debug!(
-                asset = %asset,
+                asset = %asset_display,
                 source = %data.source,
                 price = %price,
                 "Price updated"

@@ -1,7 +1,16 @@
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
-use crate::types::{Asset, Mode, OrderStrategy, RuntimeConfig};
+use crate::types::{Mode, OrderStrategy, RuntimeConfig, Asset};
+
+/// Asset definition from config.toml [[asset_definitions]].
+/// Defines a crypto asset with its Binance symbol and keyword matching rules.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AssetDef {
+    pub symbol: String,
+    pub binance_symbol: String,
+    pub keywords: Vec<String>,
+}
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -10,6 +19,9 @@ pub struct Config {
     pub strategy: StrategyConfig,
     pub risk: RiskConfig,
     pub server: ServerConfig,
+    /// Asset definitions — each maps a symbol to Binance pair + discovery keywords.
+    #[serde(default)]
+    pub asset_definitions: Vec<AssetDef>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -20,7 +32,8 @@ pub struct StrategyConfig {
     pub max_spread: Decimal,
     pub order_strategy: OrderStrategy,
     pub market_refresh_secs: u64,
-    pub assets: Vec<Asset>,
+    /// Active asset symbols (e.g. ["BTC", "ETH"]). Must be a subset of asset_definitions.
+    pub assets: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -76,6 +89,20 @@ impl Config {
             bail!("assets list must not be empty");
         }
 
+        // Validate active assets have matching definitions
+        let defined_symbols: Vec<String> = self.asset_definitions.iter()
+            .map(|d| d.symbol.to_uppercase())
+            .collect();
+        for active in &self.strategy.assets {
+            let upper = active.to_uppercase();
+            if !defined_symbols.contains(&upper) {
+                bail!(
+                    "Active asset '{}' has no matching [[asset_definitions]] entry. Defined: {:?}",
+                    active, defined_symbols
+                );
+            }
+        }
+
         // Risk validation
         if self.risk.daily_loss_limit >= Decimal::ZERO {
             bail!(
@@ -115,6 +142,8 @@ impl Config {
 
     /// Create a RuntimeConfig snapshot from the initial static config
     pub fn to_runtime_config(&self) -> RuntimeConfig {
+        use crate::types::AssetMeta;
+
         RuntimeConfig {
             min_edge: self.strategy.min_edge,
             min_prob: self.strategy.min_prob,
@@ -122,13 +151,18 @@ impl Config {
             max_spread: self.strategy.max_spread,
             order_strategy: self.strategy.order_strategy,
             market_refresh_secs: self.strategy.market_refresh_secs,
-            assets: self.strategy.assets.clone(),
+            assets: self.strategy.assets.iter().map(|s| Asset::new(s)).collect(),
             daily_loss_limit: self.risk.daily_loss_limit,
             daily_profit_cap: self.risk.daily_profit_cap,
             max_position_pct: self.risk.max_position_pct,
             max_concurrent: self.risk.max_concurrent,
             drawdown_limit: self.risk.drawdown_limit,
             adverse_fill_pause: self.risk.adverse_fill_pause,
+            asset_definitions: self.asset_definitions.iter().map(|d| AssetMeta {
+                symbol: d.symbol.to_uppercase(),
+                binance_symbol: d.binance_symbol.clone(),
+                keywords: d.keywords.iter().map(|k| k.to_lowercase()).collect(),
+            }).collect(),
         }
     }
 }
@@ -150,7 +184,7 @@ mod tests {
                 max_spread: dec!(0.06),
                 order_strategy: OrderStrategy::Passive,
                 market_refresh_secs: 60,
-                assets: vec![Asset::Btc],
+                assets: vec!["BTC".to_string()],
             },
             risk: RiskConfig {
                 daily_loss_limit: dec!(-100),
@@ -165,6 +199,13 @@ mod tests {
                 port: 3000,
                 frontend_dist: "./dist".into(),
             },
+            asset_definitions: vec![
+                AssetDef {
+                    symbol: "BTC".to_string(),
+                    binance_symbol: "BTCUSDT".to_string(),
+                    keywords: vec!["btc".to_string(), "bitcoin".to_string()],
+                },
+            ],
         }
     }
 
@@ -345,7 +386,7 @@ mod tests {
         assert_eq!(rc.max_spread, cfg.strategy.max_spread);
         assert_eq!(rc.order_strategy, cfg.strategy.order_strategy);
         assert_eq!(rc.market_refresh_secs, cfg.strategy.market_refresh_secs);
-        assert_eq!(rc.assets, cfg.strategy.assets);
+        assert_eq!(rc.assets, cfg.strategy.assets.iter().map(|s| Asset::new(s)).collect::<Vec<_>>());
         assert_eq!(rc.daily_loss_limit, cfg.risk.daily_loss_limit);
         assert_eq!(rc.daily_profit_cap, cfg.risk.daily_profit_cap);
         assert_eq!(rc.max_position_pct, cfg.risk.max_position_pct);

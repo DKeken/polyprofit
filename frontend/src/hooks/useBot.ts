@@ -54,7 +54,9 @@ const INITIAL: Tick = {
     max_concurrent: 50,
     drawdown_limit: "0.20",
     adverse_fill_pause: 3,
-    assets: ["Btc", "Eth", "Sol", "Xrp"],
+    assets: [],
+    known_assets: [],
+    asset_definitions: [],
   },
   drawdown_pct: 0,
   uptime_secs: 0,
@@ -70,21 +72,27 @@ export function useBot() {
 
   // Load persisted PnL history on mount (so equity curve survives page refresh)
   useEffect(() => {
-    api.pnlHistory().then((res) => {
-      if (res.points.length > 0) {
-        const initial: PnlPoint[] = res.points.map((p) => ({
-          time: p.time,
-          pnl: parseFloat(p.pnl) || 0,
-        }));
-        setPnlHistory(initial);
-      }
-    }).catch(() => { /* ignore — old backend without this endpoint */ });
+    api
+      .pnlHistory()
+      .then((res) => {
+        if (res.points.length > 0) {
+          const initial: PnlPoint[] = res.points.map((p) => ({
+            time: p.time,
+            pnl: parseFloat(p.pnl) || 0,
+          }));
+          setPnlHistory(initial);
+        }
+      })
+      .catch(() => {
+        /* ignore — old backend without this endpoint */
+      });
   }, []);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let stopped = false;
+    let delay = 1000;
 
     function connect() {
       if (stopped) return;
@@ -92,7 +100,10 @@ export function useBot() {
       const url = `${protocol}//${window.location.host}/ws`;
 
       ws = new WebSocket(url);
-      ws.onopen = () => setConnected(true);
+      ws.onopen = () => {
+        setConnected(true);
+        delay = 1000;
+      };
       ws.onmessage = (ev) => {
         try {
           const data = JSON.parse(ev.data) as Tick;
@@ -117,7 +128,10 @@ export function useBot() {
       };
       ws.onclose = () => {
         setConnected(false);
-        if (!stopped) timer = setTimeout(connect, 2000);
+        if (!stopped) {
+          timer = setTimeout(connect, delay);
+          delay = Math.min(delay * 2, 10_000);
+        }
       };
       ws.onerror = () => ws?.close();
     }
@@ -134,12 +148,13 @@ export function useBot() {
   const resume = useCallback(() => api.resume(), []);
 
   const kill = useCallback(async () => {
-    if (!window.confirm("KILL SWITCH: Cancel all orders and pause bot?")) return;
+    if (!window.confirm("KILL SWITCH: Cancel all orders and pause bot?"))
+      return;
     await api.kill();
   }, []);
 
   const updateConfig = useCallback(
-    (updates: Record<string, string | number | string[]>) => api.updateConfig(updates),
+    (updates: Record<string, unknown>) => api.updateConfig(updates),
     [],
   );
 

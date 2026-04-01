@@ -125,7 +125,13 @@ pub async fn redeem_loop(state: Arc<AppState>, client: Option<Arc<AuthClient>>) 
     let http = reqwest::Client::new();
 
     loop {
-        tokio::time::sleep(std::time::Duration::from_secs(REDEEM_INTERVAL_SECS)).await;
+        tokio::select! {
+            _ = state.shutdown.cancelled() => {
+                info!("Redeem loop shutting down");
+                return Ok(());
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(REDEEM_INTERVAL_SECS)) => {}
+        }
 
         let now = Utc::now();
         let mut to_redeem = Vec::new();
@@ -205,14 +211,7 @@ pub async fn redeem_loop(state: Arc<AppState>, client: Option<Arc<AuthClient>>) 
                     is_adverse: pnl.map(|p| p < Decimal::ZERO).unwrap_or(false),
                     timestamp: Utc::now(),
                 };
-                state.trades.write().push(trade.clone());
-
-                // Persist to DB
-                if let Some(ref db) = state.db {
-                    if let Err(e) = db.insert_trade(&trade) {
-                        warn!(error = %e, "Failed to persist redemption trade to DB");
-                    }
-                }
+                state.record_trade(&trade);
             }
         }
     }

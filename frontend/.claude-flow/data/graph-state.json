@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": 1774972853467,
+  "updatedAt": 1774982547637,
   "nodeCount": 23,
   "nodes": {
     "mem-MEMORY-memory-index": {
@@ -55,8 +55,8 @@
     "mem-gitlab_mcp_server-gitlab-mcp-server": {
       "id": "mem-gitlab_mcp_server-gitlab-mcp-server",
       "category": "gitlab_mcp_server",
-      "confidence": 0.5800000000000001,
-      "accessCount": 2,
+      "confidence": 0.5,
+      "accessCount": 0,
       "createdAt": 1774959444358
     },
     "mem-project_mcp_servers----": {
@@ -76,8 +76,8 @@
     "mem-project_mcp_servers-current-mcp-setup--8-servers-t": {
       "id": "mem-project_mcp_servers-current-mcp-setup--8-servers-t",
       "category": "project_mcp_servers",
-      "confidence": 0.6000000000000001,
-      "accessCount": 2,
+      "confidence": 0.5,
+      "accessCount": 0,
       "createdAt": 1774959444359
     },
     "mem-project_mcp_servers-next-steps": {
@@ -97,8 +97,8 @@
     "mem-project_mcp_servers-why-this-setup": {
       "id": "mem-project_mcp_servers-why-this-setup",
       "category": "project_mcp_servers",
-      "confidence": 0.6000000000000001,
-      "accessCount": 2,
+      "confidence": 0.5,
+      "accessCount": 0,
       "createdAt": 1774959444359
     },
     "mem-trello_env_location-trello-credentials-location": {
@@ -132,29 +132,29 @@
     "mem-MEMORY-critical-anti-patterns--verifi": {
       "id": "mem-MEMORY-critical-anti-patterns--verifi",
       "category": "core",
-      "confidence": 0.6000000000000001,
-      "accessCount": 2,
+      "confidence": 0.5,
+      "accessCount": 0,
       "createdAt": 1774959444360
     },
     "mem-MEMORY-shared-utilities---frontend": {
       "id": "mem-MEMORY-shared-utilities---frontend",
       "category": "core",
-      "confidence": 0.55,
-      "accessCount": 1,
+      "confidence": 0.5,
+      "accessCount": 0,
       "createdAt": 1774959444360
     },
     "mem-MEMORY-decision-log": {
       "id": "mem-MEMORY-decision-log",
       "category": "core",
-      "confidence": 0.55,
-      "accessCount": 1,
+      "confidence": 0.5,
+      "accessCount": 0,
       "createdAt": 1774959444360
     },
     "mem-MEMORY-naming-conventions": {
       "id": "mem-MEMORY-naming-conventions",
       "category": "core",
-      "confidence": 0.5800000000000001,
-      "accessCount": 2,
+      "confidence": 0.5,
+      "accessCount": 0,
       "createdAt": 1774959444360
     },
     "insight-1774969623537-dw2a": {

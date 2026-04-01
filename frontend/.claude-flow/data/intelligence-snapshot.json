@@ -254,5 +254,517 @@
         "accessCount": 0
       }
     ]
+  },
+  {
+    "timestamp": 1774974102176,
+    "nodes": 23,
+    "edges": 15,
+    "pageRankSum": 1.0000000000000002,
+    "confidences": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5800000000000001,
+      0.5,
+      0.5,
+      0.6000000000000001,
+      0.5,
+      0.5,
+      0.6000000000000001,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.6300000000000001,
+      0.5800000000000001,
+      0.55,
+      0.5800000000000001,
+      0.5
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      2,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      3,
+      2,
+      1,
+      2,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-critical-anti-patterns--verifi",
+        "summary": "Critical Anti-Patterns (Verified in Real Sessions)",
+        "confidence": 0.6300000000000001,
+        "pageRank": 0.05816346760028247,
+        "accessCount": 3
+      },
+      {
+        "id": "mem-project_mcp_servers-why-this-setup",
+        "summary": "Why This Setup",
+        "confidence": 0.6000000000000001,
+        "pageRank": 0.07578990719557716,
+        "accessCount": 2
+      },
+      {
+        "id": "mem-MEMORY-naming-conventions",
+        "summary": "Naming Conventions",
+        "confidence": 0.5800000000000001,
+        "pageRank": 0.08267374302229973,
+        "accessCount": 2
+      },
+      {
+        "id": "mem-MEMORY-shared-utilities---frontend",
+        "summary": "Shared Utilities — Frontend",
+        "confidence": 0.5800000000000001,
+        "pageRank": 0.06769129278211966,
+        "accessCount": 2
+      },
+      {
+        "id": "mem-project_mcp_servers-current-mcp-setup--8-servers-t",
+        "summary": "Current MCP Setup (8 servers total)",
+        "confidence": 0.6000000000000001,
+        "pageRank": 0.04695422365410124,
+        "accessCount": 2
+      },
+      {
+        "id": "mem-MEMORY-decision-log",
+        "summary": "Decision Log",
+        "confidence": 0.55,
+        "pageRank": 0.07578990719557716,
+        "accessCount": 1
+      },
+      {
+        "id": "mem-gitlab_mcp_server-gitlab-mcp-server",
+        "summary": "GitLab MCP server",
+        "confidence": 0.5800000000000001,
+        "pageRank": 0.01825235870768708,
+        "accessCount": 2
+      },
+      {
+        "id": "mem-desktop_ui_patterns-chat-sidebar",
+        "summary": "Chat sidebar",
+        "confidence": 0.5,
+        "pageRank": 0.06769129278211966,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_mcp_servers-enabled-plugins",
+        "summary": "Enabled Plugins",
+        "confidence": 0.5,
+        "pageRank": 0.06769129278211966,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-desktop_ui_patterns-empty-states",
+        "summary": "Empty states",
+        "confidence": 0.5,
+        "pageRank": 0.05816346760028247,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1774975914293,
+    "nodes": 23,
+    "edges": 15,
+    "pageRankSum": 1.0000000000000002,
+    "confidences": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.6000000000000001,
+      0.5,
+      0.5,
+      0.5,
+      0.6000000000000001,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-project_mcp_servers-why-this-setup",
+        "summary": "Why This Setup",
+        "confidence": 0.6000000000000001,
+        "pageRank": 0.07578990719557716,
+        "accessCount": 2
+      },
+      {
+        "id": "mem-MEMORY-skill-files",
+        "summary": "Skill Files",
+        "confidence": 0.6000000000000001,
+        "pageRank": 0.04695422365410124,
+        "accessCount": 2
+      },
+      {
+        "id": "mem-MEMORY-naming-conventions",
+        "summary": "Naming Conventions",
+        "confidence": 0.5,
+        "pageRank": 0.08267374302229973,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-decision-log",
+        "summary": "Decision Log",
+        "confidence": 0.5,
+        "pageRank": 0.07578990719557716,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-desktop_ui_patterns-chat-sidebar",
+        "summary": "Chat sidebar",
+        "confidence": 0.5,
+        "pageRank": 0.06769129278211966,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_mcp_servers-enabled-plugins",
+        "summary": "Enabled Plugins",
+        "confidence": 0.5,
+        "pageRank": 0.06769129278211966,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-shared-utilities---frontend",
+        "summary": "Shared Utilities — Frontend",
+        "confidence": 0.5,
+        "pageRank": 0.06769129278211966,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-desktop_ui_patterns-empty-states",
+        "summary": "Empty states",
+        "confidence": 0.5,
+        "pageRank": 0.05816346760028247,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_mcp_servers-next-steps",
+        "summary": "Next Steps",
+        "confidence": 0.5,
+        "pageRank": 0.05816346760028247,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-critical-anti-patterns--verifi",
+        "summary": "Critical Anti-Patterns (Verified in Real Sessions)",
+        "confidence": 0.5,
+        "pageRank": 0.05816346760028247,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1774979086360,
+    "nodes": 23,
+    "edges": 15,
+    "pageRankSum": 1.0000000000000002,
+    "confidences": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-naming-conventions",
+        "summary": "Naming Conventions",
+        "confidence": 0.5,
+        "pageRank": 0.08267374302229973,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_mcp_servers-why-this-setup",
+        "summary": "Why This Setup",
+        "confidence": 0.5,
+        "pageRank": 0.07578990719557716,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-decision-log",
+        "summary": "Decision Log",
+        "confidence": 0.5,
+        "pageRank": 0.07578990719557716,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-desktop_ui_patterns-chat-sidebar",
+        "summary": "Chat sidebar",
+        "confidence": 0.5,
+        "pageRank": 0.06769129278211966,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_mcp_servers-enabled-plugins",
+        "summary": "Enabled Plugins",
+        "confidence": 0.5,
+        "pageRank": 0.06769129278211966,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-shared-utilities---frontend",
+        "summary": "Shared Utilities — Frontend",
+        "confidence": 0.5,
+        "pageRank": 0.06769129278211966,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-desktop_ui_patterns-empty-states",
+        "summary": "Empty states",
+        "confidence": 0.5,
+        "pageRank": 0.05816346760028247,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_mcp_servers-next-steps",
+        "summary": "Next Steps",
+        "confidence": 0.5,
+        "pageRank": 0.05816346760028247,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-critical-anti-patterns--verifi",
+        "summary": "Critical Anti-Patterns (Verified in Real Sessions)",
+        "confidence": 0.5,
+        "pageRank": 0.05816346760028247,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-desktop_ui_patterns-settings",
+        "summary": "Settings",
+        "confidence": 0.5,
+        "pageRank": 0.04695422365410124,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1774982547639,
+    "nodes": 23,
+    "edges": 15,
+    "pageRankSum": 1.0000000000000002,
+    "confidences": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-naming-conventions",
+        "summary": "Naming Conventions",
+        "confidence": 0.5,
+        "pageRank": 0.08267374302229973,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_mcp_servers-why-this-setup",
+        "summary": "Why This Setup",
+        "confidence": 0.5,
+        "pageRank": 0.07578990719557716,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-decision-log",
+        "summary": "Decision Log",
+        "confidence": 0.5,
+        "pageRank": 0.07578990719557716,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-desktop_ui_patterns-chat-sidebar",
+        "summary": "Chat sidebar",
+        "confidence": 0.5,
+        "pageRank": 0.06769129278211966,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_mcp_servers-enabled-plugins",
+        "summary": "Enabled Plugins",
+        "confidence": 0.5,
+        "pageRank": 0.06769129278211966,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-shared-utilities---frontend",
+        "summary": "Shared Utilities — Frontend",
+        "confidence": 0.5,
+        "pageRank": 0.06769129278211966,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-desktop_ui_patterns-empty-states",
+        "summary": "Empty states",
+        "confidence": 0.5,
+        "pageRank": 0.05816346760028247,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_mcp_servers-next-steps",
+        "summary": "Next Steps",
+        "confidence": 0.5,
+        "pageRank": 0.05816346760028247,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-critical-anti-patterns--verifi",
+        "summary": "Critical Anti-Patterns (Verified in Real Sessions)",
+        "confidence": 0.5,
+        "pageRank": 0.05816346760028247,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-desktop_ui_patterns-settings",
+        "summary": "Settings",
+        "confidence": 0.5,
+        "pageRank": 0.04695422365410124,
+        "accessCount": 0
+      }
+    ]
   }
 ]

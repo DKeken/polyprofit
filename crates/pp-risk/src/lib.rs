@@ -133,7 +133,7 @@ mod tests {
                 max_spread: dec!(0.06),
                 order_strategy: pp_core::OrderStrategy::Passive,
                 market_refresh_secs: 60,
-                assets: vec![pp_core::Asset::Btc],
+                assets: vec!["BTC".to_string()],
             },
             risk: pp_core::config::RiskConfig {
                 daily_loss_limit: dec!(-100),
@@ -148,6 +148,13 @@ mod tests {
                 port: 3000,
                 frontend_dist: "./dist".into(),
             },
+            asset_definitions: vec![
+                pp_core::config::AssetDef {
+                    symbol: "BTC".to_string(),
+                    binance_symbol: "BTCUSDT".to_string(),
+                    keywords: vec!["btc".to_string(), "bitcoin".to_string()],
+                },
+            ],
         }
     }
 

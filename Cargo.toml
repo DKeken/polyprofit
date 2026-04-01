@@ -27,6 +27,7 @@ tower-http = { version = "0.6", features = ["cors", "fs"] }
 futures = "0.3"
 dashmap = "6.1"
 parking_lot = "0.12"
+tokio-util = "0.7"
 uuid = { version = "1", features = ["v4"] }
 alloy = { version = "1", features = ["signers", "signer-local"] }
 polymarket-client-sdk = { version = "0.4", features = [
@@ -56,6 +57,7 @@ pp-execution.workspace = true
 pp-risk.workspace = true
 pp-server.workspace = true
 tokio.workspace = true
+tokio-util = { workspace = true }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 anyhow.workspace = true

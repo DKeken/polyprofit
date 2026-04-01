@@ -20,7 +20,29 @@ pub async fn maker_loop(state: Arc<AppState>, client: Option<Arc<AuthClient>>) -
     info!("Maker cancel/replace loop started (interval: {CANCEL_REPLACE_INTERVAL_MS}ms)");
 
     loop {
-        tokio::time::sleep(std::time::Duration::from_millis(CANCEL_REPLACE_INTERVAL_MS)).await;
+        tokio::select! {
+            _ = state.shutdown.cancelled() => {
+                info!("Maker loop shutting down — cancelling all open maker orders");
+                // Cancel all remaining maker orders before exit
+                let order_ids: Vec<String> = state.maker_orders.iter()
+                    .map(|e| e.key().clone())
+                    .collect();
+                if !order_ids.is_empty() {
+                    if let Some(ref clob) = client {
+                        let ids: Vec<&str> = order_ids.iter().map(|s| s.as_str()).collect();
+                        if let Err(e) = clob.cancel_orders(&ids).await {
+                            warn!(error = %e, "Failed to cancel maker orders on shutdown");
+                        }
+                    }
+                    for id in &order_ids {
+                        state.maker_orders.remove(id);
+                    }
+                    info!(count = order_ids.len(), "Maker orders cancelled on shutdown");
+                }
+                return Ok(());
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_millis(CANCEL_REPLACE_INTERVAL_MS)) => {}
+        }
 
         if state.is_paused() || !state.is_heartbeat_alive() {
             continue;

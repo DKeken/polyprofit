@@ -4,7 +4,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use dashmap::DashMap;
 use rust_decimal::Decimal;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use polymarket_client_sdk::types::U256;
 
@@ -42,7 +42,13 @@ pub async fn fee_refresh_loop(
     client: Option<Arc<AuthClient>>,
 ) -> Result<()> {
     loop {
-        tokio::time::sleep(std::time::Duration::from_secs(REFRESH_INTERVAL_SECS)).await;
+        tokio::select! {
+            _ = state.shutdown.cancelled() => {
+                info!("Fee refresh loop shutting down");
+                return Ok(());
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(REFRESH_INTERVAL_SECS)) => {}
+        }
 
         let clob = match client {
             Some(ref c) => c,
@@ -76,8 +82,14 @@ pub async fn fee_refresh_loop(
                 }
             }
 
-            // Rate-limit: 100ms between requests
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            // Rate-limit: 100ms between requests — also check shutdown
+            tokio::select! {
+                _ = state.shutdown.cancelled() => {
+                    info!("Fee refresh loop shutting down (mid-refresh)");
+                    return Ok(());
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {}
+            }
         }
     }
 }

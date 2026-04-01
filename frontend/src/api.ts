@@ -58,6 +58,10 @@ export interface MarketsResponse {
   markets: MarketInfo[];
 }
 
+export interface RefreshMarketsResponse {
+  count: number;
+}
+
 // ── Internal helpers ──
 
 const BASE = "";
@@ -97,7 +101,7 @@ export const api = {
   kill: () => post<KillResponse>("/api/kill"),
 
   /** Partial config update. Only send changed fields. */
-  updateConfig: (updates: Record<string, string | number | string[]>) =>
+  updateConfig: (updates: Record<string, unknown>) =>
     put<ConfigResult>("/api/config", updates),
 
   /** Load PnL history from persisted trades (for equity curve on page load) */
@@ -105,4 +109,7 @@ export const api = {
 
   /** Fetch active markets */
   getMarkets: () => get<MarketsResponse>("/api/markets"),
+
+  /** Trigger immediate market re-discovery from Polymarket */
+  refreshMarkets: () => post<RefreshMarketsResponse>("/api/markets/refresh"),
 } as const;
