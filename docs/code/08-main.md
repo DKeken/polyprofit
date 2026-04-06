@@ -18,34 +18,29 @@ async fn main() -> anyhow::Result<()> {
         .json()
         .init();
 
-    // 2. Config: файл → env vars override
+    // 2. Config
     let config: Config = {
         let text = tokio::fs::read_to_string("config.toml").await?;
-        let mut cfg: Config = toml::from_str(&text)?;
-        // Private key ТОЛЬКО из env (никогда из файла)
-        cfg.private_key = std::env::var("POLYMARKET_PRIVATE_KEY")
-            .map_err(|_| anyhow::anyhow!("POLYMARKET_PRIVATE_KEY not set"))?;
-        cfg
+        toml::from_str(&text)?
     };
 
-    tracing::info!("Mode: {:?}, assets: {:?}", config.mode, config.strategy.assets);
+    tracing::info!("Assets: {:?}", config.strategy.assets);
 
     // 3. Shared state
     let state: Arc<RwLock<AppState>> = Arc::new(RwLock::new(AppState::default()));
 
-    // 4. SDK client + auth
-    let signer = alloy_signer_local::LocalSigner::from_str(&config.private_key)?
-        .with_chain_id(Some(config.chain_id));
+    // 4. Runtime auth + signer bootstrap
+    // POLYMARKET_PRIVATE_KEY читается только из env и должен быть реальным EVM wallet key.
+    // Optional L2 API credentials (API key / secret / passphrase) могут быть переиспользованы,
+    // но order placement всё равно требует signer для EIP-712 подписи.
+    let live = authenticate_runtime().await?;
+    let clob = Arc::new(live.client);
+    let signer = live.signer;
 
-    let clob = polymarket_client_sdk::ClobClient::new(
-        "https://clob.polymarket.com",
-        Default::default(),
-    )?
-        .authentication_builder(&signer)
-        .signature_type(SignatureType::PolyProxy)
-        .authenticate()
-        .await?;
-    let clob = Arc::new(clob);
+    // Auto-signing boundary живёт в execution layer:
+    // main.rs больше не вызывает clob.sign(...) напрямую и не тащит concrete signer
+    // через весь runtime.
+    let _ = signer;
 
     // 5. Market discovery
     let markets = pp_discovery::discover(&config).await?;
@@ -54,32 +49,14 @@ async fn main() -> anyhow::Result<()> {
     // 6. Fee cache
     let fee_cache: Arc<RwLock<HashMap<TokenId, u32>>> = Arc::new(RwLock::new(HashMap::new()));
 
-    // 7. Запуск всех задач параллельно (fail-fast: одна упала → все стоп)
-    tokio::try_join!(
-        // Data feeds
-        pp_feeds::rtds::run(state.clone()),
-        pp_feeds::orderbook::run(state.clone(), markets.clone()),
-
-        // ⚠️ HEARTBEAT — без него все ордера отменяются через 10-15с
-        pp_execution::heartbeat::run(clob.clone()),
-
-        // Strategy loop (каждые 500ms)
-        pp_strategy::signal::run(
-            state.clone(), markets.clone(), clob.clone(),
-            &config, fee_cache.clone(),
-        ),
-
-        // ⚠️ Cancel/replace loop (каждые 200ms)
-        pp_execution::maker_loop::run(state.clone(), clob.clone(), &config),
-
-        // Background tasks
-        pp_discovery::refresh_loop(markets.clone(), &config),
-        pp_execution::redeem::run(clob.clone(), state.clone()),
-        pp_execution::fee_cache::refresh_loop(fee_cache.clone(), markets.clone()),
-
-        // Dashboard (Axum serves React + WS)
-        pp_server::api::run(state.clone(), markets.clone(), &config),
-    )?;
+    // 7. Запуск задач
+    // В реальном runtime signal loop отправляет Signal в execution loop,
+    // а execution loop уже вызывает pp_execution::orders::execute(..., &signer).
+    // То есть подпись ордеров происходит внутри execution boundary, а не в main.rs.
+    spawn_public_loops(&mut tasks, state.clone(), assets.clone(), config.clone());
+    spawn_signal_loop(&mut tasks, state.clone(), config.clone(), signal_tx);
+    spawn_execution_loop(&mut tasks, state.clone(), clob.clone(), signer, signal_rx);
+    spawn_authenticated_loops(&mut tasks, state.clone(), clob, fee_cache.clone());
 
     Ok(())
 }
@@ -99,7 +76,6 @@ async fn main() -> anyhow::Result<()> {
 ### config.toml — пример
 
 ```toml
-mode = "Demo"        # "Demo" | "Live"
 chain_id = 137       # Polygon
 
 [strategy]

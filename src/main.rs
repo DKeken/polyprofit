@@ -1,16 +1,174 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
-use alloy::signers::Signer as _;
 use alloy::signers::local::PrivateKeySigner;
-use polymarket_client_sdk::clob::{Client as ClobClient, Config as ClobConfig};
-use polymarket_client_sdk::POLYGON;
+use polymarket_client_sdk::auth::Credentials;
+use uuid::Uuid;
 
-use pp_core::{AppState, Config, Mode, Asset};
+use pp_core::{AppState, Asset, Config};
 use pp_execution::fee_cache;
+
+fn credential_bundle_from_legacy_env() -> Result<Option<Credentials>> {
+    let api_key = std::env::var("POLYMARKET_API_KEY")
+        .ok()
+        .or_else(|| std::env::var("POLYMARKET_PRIVATE_KEY").ok());
+    let secret = std::env::var("POLYMARKET_SECRET").ok();
+    let passphrase = std::env::var("POLYMARKET_PASSPHRASE").ok();
+
+    match (api_key, secret, passphrase) {
+        (None, None, None) => Ok(None),
+        (Some(key), Some(secret), Some(passphrase)) => {
+            let key = Uuid::parse_str(key.trim())
+                .context("Polymarket API key must be a valid UUID")?;
+            Ok(Some(Credentials::new(key, secret, passphrase)))
+        }
+        (Some(_), None, None) => Ok(None),
+        _ => Err(anyhow::anyhow!(
+            "POLYMARKET_API_KEY / POLYMARKET_PRIVATE_KEY, POLYMARKET_SECRET, and POLYMARKET_PASSPHRASE must either all be set together or be absent"
+        )),
+    }
+}
+
+fn wallet_signer_from_env() -> Result<Option<PrivateKeySigner>> {
+    let Some(raw) = std::env::var("POLYMARKET_PRIVATE_KEY").ok() else {
+        return Ok(None);
+    };
+
+    if Uuid::parse_str(raw.trim()).is_ok() {
+        return Ok(None);
+    }
+
+    let signer: PrivateKeySigner = raw
+        .parse()
+        .map_err(|err| anyhow::anyhow!("Invalid POLYMARKET_PRIVATE_KEY: {err}"))?;
+    Ok(Some(signer))
+}
+
+async fn authenticate_runtime() -> Result<pp_execution::LiveTradingContext> {
+    let credentials = credential_bundle_from_legacy_env()?;
+    let signer = match wallet_signer_from_env()? {
+        Some(signer) => pp_execution::AutoSigner::local(signer),
+        None => {
+            if credentials.is_some() {
+                anyhow::bail!(
+                    "Polymarket API key/secret/passphrase authenticate L2 requests, but order placement still requires a wallet signer for EIP-712 order signing. Gasless trading does not remove this signing requirement. Set POLYMARKET_PRIVATE_KEY to a real EVM wallet key, and keep the API credentials in POLYMARKET_API_KEY/POLYMARKET_SECRET/POLYMARKET_PASSPHRASE if you want to reuse them."
+                );
+            }
+            anyhow::bail!("POLYMARKET_PRIVATE_KEY must be set to a real EVM wallet private key (0x...) for trading runtime startup");
+        }
+    };
+
+    info!(address = %signer.address(), "Signer loaded");
+
+    if credentials.is_some() {
+        info!("Using existing Polymarket API credentials from environment");
+    }
+
+    let client = signer.authenticate_client(credentials).await?;
+
+    info!("CLOB client authenticated");
+    info!("SDK auto-heartbeat started (interval: 5s)");
+
+    Ok(pp_execution::LiveTradingContext::new(client, signer))
+}
+
+fn spawn_signal_loop(
+    tasks: &mut tokio::task::JoinSet<Result<()>>,
+    state: Arc<AppState>,
+    config: Arc<Config>,
+    signal_tx: tokio::sync::mpsc::Sender<pp_core::Signal>,
+) {
+    tasks.spawn(async move {
+        let risk = pp_risk::RiskManager::new(&config);
+        pp_strategy::signal::signal_loop(state, &config, &risk, signal_tx).await
+    });
+}
+
+fn spawn_execution_loop(
+    tasks: &mut tokio::task::JoinSet<Result<()>>,
+    state: Arc<AppState>,
+    client: Arc<pp_execution::AuthClient>,
+    signer: pp_execution::AutoSigner,
+    mut signal_rx: tokio::sync::mpsc::Receiver<pp_core::Signal>,
+) {
+    tasks.spawn(async move {
+        while let Some(signal) = signal_rx.recv().await {
+            let order_strategy = state.runtime_config.read().order_strategy;
+            let result = pp_execution::orders::execute(
+                &state,
+                &signal,
+                order_strategy,
+                client.as_ref(),
+                &signer,
+            )
+            .await;
+            if let Err(e) = result {
+                tracing::warn!(error = %e, "Order execution failed");
+            }
+        }
+        Ok::<(), anyhow::Error>(())
+    });
+}
+
+fn spawn_authenticated_loops(
+    tasks: &mut tokio::task::JoinSet<Result<()>>,
+    state: Arc<AppState>,
+    client: Arc<pp_execution::AuthClient>,
+    fee_cache: fee_cache::FeeCache,
+) {
+    let clob_hb = client.clone();
+    let s = state.clone();
+    tasks.spawn(async move { pp_execution::heartbeat::heartbeat_monitor(clob_hb, s).await });
+
+    let clob_mk = client.clone();
+    let s = state.clone();
+    tasks.spawn(async move { pp_execution::maker_loop::maker_loop(s, clob_mk).await });
+
+    let clob_rd = client.clone();
+    let s = state.clone();
+    tasks.spawn(async move { pp_execution::redeem::redeem_loop(s, clob_rd).await });
+
+    let clob_fe = client.clone();
+    let s = state;
+    tasks.spawn(async move { fee_cache::fee_refresh_loop(fee_cache, s, clob_fe).await });
+}
+
+fn spawn_public_loops(
+    tasks: &mut tokio::task::JoinSet<Result<()>>,
+    state: Arc<AppState>,
+    assets: Vec<Asset>,
+    config: Arc<Config>,
+) {
+    let s = state.clone();
+    let a = assets.clone();
+    tasks.spawn(async move { pp_feeds::rtds::run_rtds_feed(s, a).await });
+
+    let s = state.clone();
+    tasks.spawn(async move { pp_feeds::orderbook::run_orderbook_feed(s).await });
+
+    let s = state.clone();
+    let a = assets;
+    tasks.spawn(async move { pp_discovery::refresh_loop(s, a).await });
+
+    let srv_cfg = config;
+    let s = state.clone();
+    tasks.spawn(async move { pp_server::run_server(s, &srv_cfg).await });
+
+    let s = state;
+    tasks.spawn(async move { pp_core::db::checkpoint_loop(s, 30).await });
+}
+
+async fn maybe_discover_markets(state: &Arc<AppState>, assets: &[Asset]) {
+    info!("Discovering markets...");
+    match pp_discovery::discover(state, assets).await {
+        Ok(count) => info!(count, "Initial markets discovered"),
+        Err(error) => warn!(error = %error, "Initial market discovery failed; continuing runtime"),
+    }
+}
+
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -24,12 +182,14 @@ async fn main() -> Result<()> {
     info!("polyprofit starting...");
 
     let config = Arc::new(Config::load("config.toml")?);
-    info!(mode = ?config.mode, "Config loaded");
+    info!(chain_id = config.chain_id, "Config loaded");
 
     // ── Open embedded database ──
-    let db = pp_core::BotDb::open("polyprofit.db")?;
+    let db_path = std::env::var("POLYPROFIT_DB_PATH").unwrap_or_else(|_| "polyprofit.db".to_string());
+    let db = pp_core::BotDb::open(&db_path)?;
+    info!(db_path = %db_path, "Database opened");
 
-    let state = AppState::new_with_db(config.mode, db);
+    let state = AppState::new_with_db(db);
     state.set_starting_balance(config.risk.starting_balance);
 
     // Load asset registry + restore persisted state from DB
@@ -38,156 +198,104 @@ async fn main() -> Result<()> {
 
     let fee_cache = fee_cache::new_fee_cache();
 
-    // ── SDK authentication (Live only) ──
-    let (clob_client, signer_for_orders) = authenticate_sdk(&config).await?;
+    // ── Runtime authentication ──
+    let live = authenticate_runtime().await?;
+    let clob = Arc::new(live.client);
+    let signer = live.signer;
 
-    let (signal_tx, mut signal_rx) = tokio::sync::mpsc::channel(256);
+    let (signal_tx, signal_rx) = tokio::sync::mpsc::channel(256);
 
     let assets: Vec<Asset> = config.strategy.assets.iter().map(|s| Asset::new(s)).collect();
-    let mode = config.mode;
+    maybe_discover_markets(&state, &assets).await;
 
-    info!("Discovering markets...");
-    let count = pp_discovery::discover(&state, &assets).await?;
-    info!(count, "Initial markets discovered");
+    info!("Runtime started with execution capability");
 
-    // ── Spawn SIGINT/SIGTERM listener ──
-    let shutdown = state.shutdown.clone();
-    tokio::spawn(async move {
-        let ctrl_c = tokio::signal::ctrl_c();
-        #[cfg(unix)]
-        {
-            use tokio::signal::unix::{SignalKind, signal};
-            let mut sigterm = signal(SignalKind::terminate()).expect("SIGTERM handler");
-            tokio::select! {
-                _ = ctrl_c => {},
-                _ = sigterm.recv() => {},
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            let _ = ctrl_c.await;
-        }
-        info!("Shutdown signal received, stopping all tasks...");
-        shutdown.cancel();
-        // Force exit after 2s — ensures DB lock is released before cargo-watch restarts
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        std::process::exit(0);
-    });
+    // ── Shutdown signal listener ──
+    let shutdown_signal = wait_for_shutdown_signal();
 
     // ── Task spawning ──
     // Each task gets its own Arc clone of shared state.
     // The shutdown token inside AppState is checked by each loop.
+    let mut tasks = tokio::task::JoinSet::new();
 
-    let s = state.clone();
-    let a = assets.clone();
-    let h_rtds = tokio::spawn(async move {
-        pp_feeds::rtds::run_rtds_feed(s, a).await
-    });
+    spawn_public_loops(&mut tasks, state.clone(), assets.clone(), config.clone());
+    spawn_signal_loop(&mut tasks, state.clone(), config.clone(), signal_tx);
+    spawn_execution_loop(&mut tasks, state.clone(), clob.clone(), signer, signal_rx);
+    spawn_authenticated_loops(&mut tasks, state.clone(), clob, fee_cache.clone());
 
-    let s = state.clone();
-    let h_ob = tokio::spawn(async move {
-        pp_feeds::orderbook::run_orderbook_feed(s).await
-    });
+    state.heartbeat_alive.store(true, std::sync::atomic::Ordering::Relaxed);
+    state.paused.store(false, std::sync::atomic::Ordering::Relaxed);
 
-    let clob_hb = clob_client.clone();
-    let s = state.clone();
-    let h_heartbeat = tokio::spawn(async move {
-        match clob_hb {
-            Some(c) => pp_execution::heartbeat::heartbeat_monitor(c, s).await,
-            None => pp_execution::heartbeat::heartbeat_demo(s).await,
+
+    tokio::select! {
+        _ = shutdown_signal => {
+            info!("Shutdown signal received, stopping all tasks...");
         }
-    });
-
-    let sig_cfg = config.clone();
-    let s = state.clone();
-    let h_signal = tokio::spawn(async move {
-        let risk = pp_risk::RiskManager::new(&sig_cfg);
-        pp_strategy::signal::signal_loop(s, &sig_cfg, &risk, signal_tx).await
-    });
-
-    let clob_exec = clob_client.clone();
-    let s = state.clone();
-    let h_executor = tokio::spawn(async move {
-        while let Some(signal) = signal_rx.recv().await {
-            let order_strategy = s.runtime_config.read().order_strategy;
-
-            let result = match mode {
-                Mode::Demo => {
-                    pp_execution::orders::execute_demo(&s, &signal).await
+        result = tasks.join_next() => {
+            match result {
+                Some(Ok(Ok(()))) => {
+                    warn!("A background task exited early; initiating shutdown");
                 }
-                Mode::Live => {
-                    let client = match clob_exec.as_deref() {
-                        Some(c) => c,
-                        None => { tracing::error!("BUG: Live mode but no CLOB client"); break; }
-                    };
-                    let signer = match signer_for_orders.as_ref() {
-                        Some(s) => s,
-                        None => { tracing::error!("BUG: Live mode but no signer"); break; }
-                    };
-                    pp_execution::orders::execute_live(
-                        &s, &signal, order_strategy, client, signer,
-                    ).await
+                Some(Ok(Err(e))) => {
+                    state.shutdown.cancel();
+                    drain_tasks(&mut tasks).await;
+                    return Err(e.context("background task failed"));
                 }
-            };
-            if let Err(e) = result {
-                tracing::warn!(error = %e, "Order execution failed");
+                Some(Err(e)) => {
+                    state.shutdown.cancel();
+                    drain_tasks(&mut tasks).await;
+                    return Err(anyhow::anyhow!("background task panicked: {e}"));
+                }
+                None => {
+                    info!("All background tasks exited");
+                }
             }
         }
-        Ok::<(), anyhow::Error>(())
-    });
-
-    let clob_mk = clob_client.clone();
-    let s = state.clone();
-    let h_maker = tokio::spawn(async move {
-        pp_execution::maker_loop::maker_loop(s, clob_mk).await
-    });
-
-    let s = state.clone();
-    let a = assets.clone();
-    let h_discovery = tokio::spawn(async move {
-        pp_discovery::refresh_loop(s, a).await
-    });
-
-    let clob_rd = clob_client.clone();
-    let s = state.clone();
-    let h_redeem = tokio::spawn(async move {
-        pp_execution::redeem::redeem_loop(s, clob_rd).await
-    });
-
-    let srv_cfg = config.clone();
-    let s = state.clone();
-    let h_server = tokio::spawn(async move {
-        pp_server::run_server(s, &srv_cfg).await
-    });
-
-    let clob_fe = clob_client.clone();
-    let s = state.clone();
-    let h_fees = tokio::spawn(async move {
-        fee_cache::fee_refresh_loop(fee_cache, s, clob_fe).await
-    });
-
-    let s = state.clone();
-    let h_checkpoint = tokio::spawn(async move {
-        pp_core::db::checkpoint_loop(s, 30).await
-    });
-
-    // Wait for any task to complete (or shutdown signal triggers clean exit via checkpoint_loop)
-    tokio::select! {
-        r = h_rtds => { r??; }
-        r = h_ob => { r??; }
-        r = h_heartbeat => { r??; }
-        r = h_signal => { r??; }
-        r = h_executor => { r??; }
-        r = h_maker => { r??; }
-        r = h_discovery => { r??; }
-        r = h_redeem => { r??; }
-        r = h_server => { r??; }
-        r = h_fees => { r??; }
-        r = h_checkpoint => { r??; }
     }
+
+    state.shutdown.cancel();
+    drain_tasks(&mut tasks).await;
 
     info!("polyprofit shutting down");
     Ok(())
+}
+
+async fn wait_for_shutdown_signal() {
+    let ctrl_c = tokio::signal::ctrl_c();
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut sigterm = signal(SignalKind::terminate()).expect("SIGTERM handler");
+        tokio::select! {
+            _ = ctrl_c => {},
+            _ = sigterm.recv() => {},
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = ctrl_c.await;
+    }
+}
+
+async fn drain_tasks(tasks: &mut tokio::task::JoinSet<Result<()>>) {
+    let drain = async {
+        while let Some(result) = tasks.join_next().await {
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => warn!(error = %e, "Background task exited during shutdown"),
+                Err(e) => warn!("Background task join error during shutdown: {e}"),
+            }
+        }
+    };
+
+    if tokio::time::timeout(std::time::Duration::from_secs(5), drain)
+        .await
+        .is_err()
+    {
+        warn!("Timed out waiting for background tasks to shut down; aborting remaining tasks");
+        tasks.abort_all();
+        while tasks.join_next().await.is_some() {}
+    }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -256,35 +364,3 @@ fn restore_persisted_state(state: &Arc<AppState>, config: &Config) {
     }
 }
 
-/// Authenticate with Polymarket CLOB SDK in Live mode.
-/// Returns (None, None) in Demo mode.
-async fn authenticate_sdk(
-    config: &Config,
-) -> Result<(Option<Arc<pp_execution::AuthClient>>, Option<PrivateKeySigner>)> {
-    if config.mode != Mode::Live {
-        info!("Demo mode — SDK disabled");
-        return Ok((None, None));
-    }
-
-    let private_key = std::env::var("POLYMARKET_PRIVATE_KEY")
-        .context("POLYMARKET_PRIVATE_KEY must be set for Live mode")?;
-
-    let signer: PrivateKeySigner = private_key.parse()
-        .context("Invalid POLYMARKET_PRIVATE_KEY")?;
-    let signer = signer.with_chain_id(Some(POLYGON));
-
-    info!(address = %signer.address(), "Signer loaded");
-
-    let mut client = ClobClient::new("https://clob.polymarket.com", ClobConfig::default())?
-        .authentication_builder(&signer)
-        .authenticate()
-        .await
-        .context("CLOB authentication failed")?;
-
-    info!("CLOB client authenticated");
-
-    ClobClient::start_heartbeats(&mut client)?;
-    info!("SDK auto-heartbeat started (interval: 5s)");
-
-    Ok((Some(Arc::new(client)), Some(signer)))
-}

@@ -39,7 +39,7 @@ pub fn fee_bps_to_decimal(bps: u32) -> Decimal {
 pub async fn fee_refresh_loop(
     cache: FeeCache,
     state: Arc<AppState>,
-    client: Option<Arc<AuthClient>>,
+    client: Arc<AuthClient>,
 ) -> Result<()> {
     loop {
         tokio::select! {
@@ -49,11 +49,6 @@ pub async fn fee_refresh_loop(
             }
             _ = tokio::time::sleep(std::time::Duration::from_secs(REFRESH_INTERVAL_SECS)) => {}
         }
-
-        let clob = match client {
-            Some(ref c) => c,
-            None => continue, // Demo mode — no fee lookups needed
-        };
 
         // Collect unique token IDs from active positions and maker orders
         let mut token_ids: Vec<String> = Vec::new();
@@ -72,7 +67,7 @@ pub async fn fee_refresh_loop(
                 Err(_) => continue,
             };
 
-            match clob.fee_rate_bps(token_u256).await {
+            match client.fee_rate_bps(token_u256).await {
                 Ok(resp) => {
                     cache.insert(tid.clone(), resp.base_fee);
                     debug!(token_id = %tid, fee_bps = resp.base_fee, "Fee rate cached via SDK");

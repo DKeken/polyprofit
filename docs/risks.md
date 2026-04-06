@@ -94,7 +94,7 @@ Kelly-inspired: `base = balance × 5%`, `mult = (edge / min_edge).clamp(1, 3)`, 
 2. **Не торговать без stop-loss** — daily loss limit обязателен
 3. **Не торговать в последние 5 минут** до resolution — слишком рискованно
 4. **Не игнорировать adverse fills** — 3 подряд = пауза
-5. **Не запускать live без demo** — минимум 50 demo сделок
+5. **Не запускать runtime без verification** — сначала `make verify` и smoke test dashboard/settings flow
 6. **Не торговать на домашнем WiFi в production** — VPS обязателен (фаза 4+)
 7. **Не хранить private key в коде** — только .env, только на сервере
 8. **Не торговать один актив** — диверсификация BTC+ETH+SOL+XRP

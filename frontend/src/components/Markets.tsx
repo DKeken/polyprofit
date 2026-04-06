@@ -20,14 +20,14 @@ function assetColor(_asset: string, idx: number): string {
   return PALETTE[idx % PALETTE.length];
 }
 
-const KIND_BG: Record<string, string> = {
-  UpDown: "bg-emerald-500/5",
-  FiveMin: "bg-sky-500/5",
-  Above: "bg-amber-500/5",
-  Below: "bg-rose-500/5",
-  Dip: "bg-violet-500/5",
-  Reach: "bg-teal-500/5",
-  Range: "bg-indigo-500/5",
+const KIND_BADGE: Record<string, string> = {
+  UpDown: "bg-emerald-500/10 text-emerald-400 border-emerald-800/50",
+  FiveMin: "bg-sky-500/10 text-sky-400 border-sky-800/50",
+  Above: "bg-amber-500/10 text-amber-400 border-amber-800/50",
+  Below: "bg-rose-500/10 text-rose-400 border-rose-800/50",
+  Dip: "bg-violet-500/10 text-violet-400 border-violet-800/50",
+  Reach: "bg-teal-500/10 text-teal-400 border-teal-800/50",
+  Range: "bg-indigo-500/10 text-indigo-400 border-indigo-800/50",
 };
 
 const KINDS = [
@@ -54,6 +54,33 @@ function formatEndsIn(endTime: string): string {
   if (h < 24) return `${h}h ${m}m`;
   const d = Math.floor(h / 24);
   return `${d}d ${h % 24}h`;
+}
+
+/* ── Filter Chip ── */
+
+function Chip({
+  label,
+  active,
+  onClick,
+  color,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  color?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-200 border ${
+        active
+          ? color ?? "bg-emerald-500/15 text-emerald-400 border-emerald-700/50"
+          : "bg-zinc-800/60 text-zinc-500 border-zinc-700/50 hover:text-zinc-300 hover:border-zinc-600"
+      }`}
+    >
+      {label}
+    </button>
+  );
 }
 
 /* ── Component ── */
@@ -130,123 +157,146 @@ export default function Markets() {
       return true;
     })
     .sort(
-      (a, b) => new Date(a.end_time).getTime() - new Date(b.end_time).getTime(),
+      (a, b) =>
+        new Date(a.end_time).getTime() - new Date(b.end_time).getTime(),
     );
 
   return (
-    <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm text-zinc-400 uppercase tracking-wider">
-          Markets
-        </h2>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-zinc-600">
-            {filtered.length} / {markets.length} markets
-          </span>
+    <div className="space-y-4 animate-slide-up">
+      {/* Header + Filters */}
+      <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 card-glow">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <h2 className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">
+              Markets
+            </h2>
+            <span className="text-[11px] text-zinc-600 mono">
+              {filtered.length} / {markets.length}
+            </span>
+          </div>
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="text-xs px-2 py-1 rounded border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="text-[11px] px-2.5 py-1 rounded-md border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
           >
             {refreshing ? "Fetching…" : "↻ Refresh"}
           </button>
         </div>
-      </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-2 mb-3">
-        <select
-          value={assetFilter}
-          onChange={(e) => setAssetFilter(e.target.value)}
-          className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 outline-none focus:border-zinc-600"
-        >
+        {/* Asset chips */}
+        <div className="flex flex-wrap gap-1.5 mb-2.5">
           {uniqueAssets.map((a) => (
-            <option key={a} value={a}>
-              {a === "All" ? "All Assets" : a}
-            </option>
+            <Chip
+              key={a}
+              label={a === "All" ? "All Assets" : a}
+              active={assetFilter === a}
+              onClick={() => setAssetFilter(a)}
+            />
           ))}
-        </select>
+        </div>
 
-        <select
-          value={kindFilter}
-          onChange={(e) => setKindFilter(e.target.value)}
-          className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 outline-none focus:border-zinc-600"
-        >
+        {/* Kind chips */}
+        <div className="flex flex-wrap gap-1.5 mb-3">
           {KINDS.map((k) => (
-            <option key={k} value={k}>
-              {k === "All" ? "All Kinds" : k}
-            </option>
+            <Chip
+              key={k}
+              label={k === "All" ? "All Types" : k}
+              active={kindFilter === k}
+              onClick={() => setKindFilter(k)}
+              color={
+                kindFilter === k && k !== "All"
+                  ? KIND_BADGE[k]
+                  : undefined
+              }
+            />
           ))}
-        </select>
+        </div>
 
+        {/* Search */}
         <input
           type="text"
-          placeholder="Search question…"
+          placeholder="Search markets…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 placeholder-zinc-600 outline-none focus:border-zinc-600 flex-1 min-w-[140px]"
+          className="w-full bg-zinc-800/60 border border-zinc-700/60 rounded-lg px-3 py-2 text-sm text-zinc-300 placeholder-zinc-600 outline-none focus:border-zinc-500 focus:ring-1 focus:ring-emerald-500/30 transition-all"
         />
       </div>
 
       {/* Content */}
-      {loading ? (
-        <div className="text-zinc-600 text-sm py-8 text-center">
-          Loading markets…
-        </div>
-      ) : error ? (
-        <div className="text-red-400 text-sm py-8 text-center">{error}</div>
-      ) : filtered.length === 0 ? (
-        <div className="text-zinc-600 text-sm py-8 text-center">
-          No markets match filters
-        </div>
-      ) : (
-        <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
-          <table className="w-full text-left">
-            <thead className="sticky top-0 bg-zinc-900">
-              <tr className="text-xs text-zinc-500 uppercase border-b border-zinc-800">
-                <th className="pb-2 pr-3">Asset</th>
-                <th className="pb-2 pr-3">Kind</th>
-                <th className="pb-2 pr-3">Question</th>
-                <th className="pb-2 pr-3">Strike</th>
-                <th className="pb-2 pr-3">Ends In</th>
-                <th className="pb-2">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((m) => (
-                <tr
-                  key={m.condition_id}
-                  className={`border-b border-zinc-800/50 text-sm hover:bg-zinc-800/30 transition-colors ${KIND_BG[m.kind] ?? ""}`}
-                >
-                  <td
-                    className={`py-2 pr-3 font-medium ${assetColorMap[m.asset] ?? "text-zinc-300"}`}
-                  >
-                    {m.asset}
-                  </td>
-                  <td className="py-2 pr-3 text-zinc-400">{m.kind}</td>
-                  <td className="py-2 pr-3 text-zinc-300 max-w-[320px] truncate">
-                    {m.question}
-                  </td>
-                  <td className="py-2 pr-3 mono text-zinc-400">
-                    {m.strike ?? "—"}
-                  </td>
-                  <td className="py-2 pr-3 text-zinc-400 text-xs">
-                    {formatEndsIn(m.end_time)}
-                  </td>
-                  <td className="py-2">
-                    {m.active ? (
-                      <span className="text-emerald-400 text-xs">Active</span>
-                    ) : (
-                      <span className="text-zinc-600 text-xs">Inactive</span>
-                    )}
-                  </td>
+      <div className="bg-zinc-900 rounded-xl border border-zinc-800 card-glow">
+        {loading ? (
+          <div className="p-4 space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-10 rounded-lg shimmer" />
+            ))}
+          </div>
+        ) : error ? (
+          <div className="text-red-400 text-sm py-12 text-center">{error}</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-zinc-600 text-sm py-12 text-center">
+            No markets match filters
+          </div>
+        ) : (
+          <div className="overflow-x-auto max-h-[540px] overflow-y-auto">
+            <table className="w-full text-left">
+              <thead className="sticky top-0 bg-zinc-900 z-10">
+                <tr className="text-[11px] text-zinc-500 uppercase border-b border-zinc-800">
+                  <th className="py-3 px-4">Asset</th>
+                  <th className="py-3 px-4">Kind</th>
+                  <th className="py-3 px-4">Question</th>
+                  <th className="py-3 px-4">Strike</th>
+                  <th className="py-3 px-4">Ends In</th>
+                  <th className="py-3 px-4">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {filtered.map((m) => (
+                  <tr
+                    key={m.condition_id}
+                    className="border-b border-zinc-800/30 text-sm hover:bg-zinc-800/20 transition-colors"
+                  >
+                    <td
+                      className={`py-3 px-4 font-medium ${assetColorMap[m.asset] ?? "text-zinc-300"}`}
+                    >
+                      {m.asset}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
+                          KIND_BADGE[m.kind] ?? "bg-zinc-800 text-zinc-400 border-zinc-700"
+                        }`}
+                      >
+                        {m.kind}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-zinc-300 max-w-[320px] truncate">
+                      {m.question}
+                    </td>
+                    <td className="py-3 px-4 mono text-zinc-400">
+                      {m.strike ?? "—"}
+                    </td>
+                    <td className="py-3 px-4 text-zinc-400 text-xs mono">
+                      {formatEndsIn(m.end_time)}
+                    </td>
+                    <td className="py-3 px-4">
+                      {m.active ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-400 text-[10px]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse-dot" />
+                          Active
+                        </span>
+                      ) : (
+                        <span className="text-zinc-600 text-[10px]">
+                          Inactive
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

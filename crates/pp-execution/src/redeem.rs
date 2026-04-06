@@ -119,8 +119,8 @@ fn calculate_pnl(side: Side, entry_price: Decimal, size: Decimal, yes_won: bool)
 
 /// Background loop: auto-redeem resolved markets.
 /// Queries Gamma API for resolution, calculates real PnL.
-/// In Live mode, cancels remaining orders for expired markets via SDK.
-pub async fn redeem_loop(state: Arc<AppState>, client: Option<Arc<AuthClient>>) -> Result<()> {
+/// Cancels remaining orders for expired markets via SDK before redeem.
+pub async fn redeem_loop(state: Arc<AppState>, client: Arc<AuthClient>) -> Result<()> {
     info!("Auto-redeem loop started (interval: {REDEEM_INTERVAL_SECS}s)");
     let http = reqwest::Client::new();
 
@@ -148,14 +148,12 @@ pub async fn redeem_loop(state: Arc<AppState>, client: Option<Arc<AuthClient>>) 
 
         for condition_id in to_redeem {
             // Cancel any remaining orders for this market via SDK
-            if let Some(ref clob) = client {
-                if let Ok(market_b256) = B256::from_str(&condition_id.0) {
-                    let req = CancelMarketOrderRequest::builder()
-                        .market(market_b256)
-                        .build();
-                    if let Err(e) = clob.cancel_market_orders(&req).await {
-                        warn!(condition_id = %condition_id.0, error = %e, "Failed to cancel market orders before redeem");
-                    }
+            if let Ok(market_b256) = B256::from_str(&condition_id.0) {
+                let req = CancelMarketOrderRequest::builder()
+                    .market(market_b256)
+                    .build();
+                if let Err(e) = client.cancel_market_orders(&req).await {
+                    warn!(condition_id = %condition_id.0, error = %e, "Failed to cancel market orders before redeem");
                 }
             }
 

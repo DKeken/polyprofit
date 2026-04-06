@@ -62,7 +62,6 @@ max_trade_size = $5         # по умолчанию
 **Config (.env):**
 
 ```env
-MODE=demo
 ORACLE_SOURCE=polymarket        # или "chainlink" для прямого доступа
 ASSETS=btc,eth,xrp,sol
 NOTIONAL_PER_TRADE=5
@@ -253,6 +252,8 @@ polymarket-client-sdk = { version = "0.3", features = [
 3. **Авто heartbeat** — с фичей `heartbeats`
 4. **Zero-cost abstractions** — нет dynamic dispatch в hot paths
 5. **Alloy signers** — поддержка LocalSigner, AWS KMS, remote signers
+
+Важно: AWS KMS и remote signers — это альтернативные signer backends для той же обязательной EIP-712 подписи. Они не превращают CLOB trading в credentials-only flow и не отменяют requirement на signer.
 
 ### Готовые WS стримы
 

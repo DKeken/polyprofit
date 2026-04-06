@@ -1,8 +1,8 @@
 # 📚 Polymarket Oracle Arbitrage — База знаний
 
-> **Цель:** Заработать на oracle latency арбитраже на Polymarket.  
-> **Дата:** 31 марта 2026  
-> **Статус:** Исследование завершено. Готово к имплементации.
+> **Цель:** Заработать на oracle latency арбитраже на Polymarket.
+> **Дата:** 31 марта 2026
+> **Статус:** Исследование завершено, кодовая база реализована. Текущий фокус — стабилизация runtime, UI/API config flow и verification path.
 
 ---
 
@@ -41,6 +41,69 @@
 ---
 
 ## Суть в 30 секунд
+
+1. **Polymarket** — рынок предсказаний. "BTC up?" → YES/NO по $0–$1
+2. **Chainlink oracle** отстаёт от Binance на **15–55 секунд**
+3. **В это окно** исход уже известен, контракты ещё не переоценены
+4. **Бот** ставит maker order на правильную сторону → 0% fee + rebates
+5. **~$250-500/мес на $500 капитал** (честная оценка). $985/день при $10k+
+
+## Текущее состояние репозитория
+
+Это уже не пустой шаблон и не research-only monorepo. В репозитории есть:
+
+- рабочий Rust workspace с доменными crate'ами (`pp-core`, `pp-feeds`, `pp-discovery`, `pp-strategy`, `pp-execution`, `pp-risk`, `pp-server`)
+- React/Vite frontend dashboard
+- runtime config flow через UI + backend persistence
+- DB restore/checkpoint path
+- verification target: `make verify`
+
+Если цель — **запустить и проверить текущий проект**, начинай с [quickstart.md](./quickstart.md) и ориентируйся на реальные verification-команды из репозитория, а не на bootstrap-инструкции по созданию monorepo с нуля.
+
+Если цель — **сравнить реализацию с исходным design intent**, используй документы в `docs/code/*` как архитектурный reference, а не как точное описание текущего состояния каждого файла.
+
+---
+
+## Что уже стабилизировано в коде
+
+- Heartbeat в UI трактуется как operational runtime liveness, а не как отдельный режим работы
+- Settings flow обновляет runtime config через API и синхронизируется с persisted server state
+- backend validation ошибки доходят до UI как содержательные сообщения
+- frontend verification включает lint, tests и production build
+- targeted tests добавлены для backend config flow и frontend Settings flow
+
+---
+
+## Где смотреть правду о текущем состоянии
+
+- Runtime orchestration: `src/main.rs`
+- REST API / config updates: `crates/pp-server/src/api.rs`
+- Dashboard tick stream: `crates/pp-server/src/ws.rs`
+- Frontend settings flow: `frontend/src/components/Settings.tsx`
+- Unified verification path: `Makefile`
+- Frontend scripts/deps: `frontend/package.json`
+
+---
+
+## Как читать docs правильно
+
+- `architecture.md`, `strategy.md`, `fees.md`, `risks.md` — design intent и бизнес-контекст
+- `docs/code/*.md` — domain-oriented pseudocode / target architecture
+- `quickstart.md` — onboarding и operational verification для текущего real-only runtime
+- `api.md` — внешний Polymarket/API reference, а не гарантия, что все описанные интеграционные сценарии уже нужны или активны в текущем runtime
+
+---
+
+## Рекомендуемый порядок для продолжения работ
+
+1. `make verify`
+2. `cargo run --release`
+3. smoke test dashboard и Settings flow
+4. только потом — точечные улучшения по реальным gap'ам
+
+---
+
+## Исходная идея стратегии
 
 1. **Polymarket** — рынок предсказаний. "BTC up?" → YES/NO по $0–$1
 2. **Chainlink oracle** отстаёт от Binance на **15–55 секунд**
@@ -109,4 +172,4 @@ polyprofit/
 > - `docs/fees.md` — fee tables, maker rebates, liquidity rewards
 > - `docs/risks.md` — risk management, kill switches
 >
-> Приоритет: Demo → Live. Maker-first. Monorepo. Structured logging.
+> Приоритет: real runtime. Maker-first. Monorepo. Structured logging.

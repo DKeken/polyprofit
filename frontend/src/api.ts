@@ -33,7 +33,15 @@ export interface ConfigErrorResponse {
   error: string;
 }
 
-type ConfigResult = ConfigUpdateResponse | ConfigErrorResponse;
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
 
 export interface PnlHistoryPoint {
   time: string;
@@ -62,20 +70,93 @@ export interface RefreshMarketsResponse {
   count: number;
 }
 
+// ── Analytics ──
+
+export interface AssetStats {
+  trades: number;
+  wins: number;
+  losses: number;
+  total_pnl: string;
+}
+
+export interface AnalyticsResponse {
+  total_trades: number;
+  winning_trades: number;
+  losing_trades: number;
+  pending_trades: number;
+  win_rate: number;
+  total_pnl: string;
+  best_trade_pnl: string | null;
+  worst_trade_pnl: string | null;
+  avg_trade_pnl: string | null;
+  avg_win: string | null;
+  avg_loss: string | null;
+  profit_factor: number | null;
+  by_asset: Record<string, AssetStats>;
+}
+
+// ── DB Stats ──
+
+export interface DbStatsResponse {
+  enabled: boolean;
+  trade_count?: number;
+  has_saved_config?: boolean;
+  has_balance_checkpoint?: boolean;
+}
+
+// ── Trades Export ──
+
+export interface TradesExportResponse {
+  trades: Array<{
+    condition_id: string;
+    side: string;
+    price: string;
+    size: string;
+    pnl: string | null;
+    is_adverse: boolean;
+    timestamp: string;
+  }>;
+}
+
 // ── Internal helpers ──
 
 const BASE = "";
 
+async function parseJsonResponse<T>(res: Response): Promise<T | ConfigErrorResponse | null> {
+  try {
+    return (await res.json()) as T | ConfigErrorResponse;
+  } catch {
+    return null;
+  }
+}
+
+function responseErrorMessage(
+  method: string,
+  path: string,
+  status: number,
+  payload: unknown,
+): string {
+  return typeof payload === "object" && payload !== null && "error" in payload
+    ? String(payload.error)
+    : `${method} ${path}: ${status}`;
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
-  if (!res.ok) throw new Error(`GET ${path}: ${res.status}`);
-  return res.json() as Promise<T>;
+  const payload = await parseJsonResponse<T>(res);
+  if (!res.ok) {
+    throw new ApiError(responseErrorMessage("GET", path, res.status, payload), res.status);
+  }
+  return payload as T;
 }
 
 async function post<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { method: "POST" });
-  if (!res.ok) throw new Error(`POST ${path}: ${res.status}`);
-  return res.json() as Promise<T>;
+  const payload = await parseJsonResponse<T>(res);
+  if (!res.ok) {
+    throw new ApiError(responseErrorMessage("POST", path, res.status, payload), res.status);
+  }
+  return payload as T;
 }
 
 async function put<T>(path: string, body: unknown): Promise<T> {
@@ -84,8 +165,13 @@ async function put<T>(path: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`PUT ${path}: ${res.status}`);
-  return res.json() as Promise<T>;
+
+  const payload = await parseJsonResponse<T>(res);
+  if (!res.ok) {
+    throw new ApiError(responseErrorMessage("PUT", path, res.status, payload), res.status);
+  }
+
+  return payload as T;
 }
 
 // ── Public API ──
@@ -102,7 +188,7 @@ export const api = {
 
   /** Partial config update. Only send changed fields. */
   updateConfig: (updates: Record<string, unknown>) =>
-    put<ConfigResult>("/api/config", updates),
+    put<ConfigUpdateResponse>("/api/config", updates),
 
   /** Load PnL history from persisted trades (for equity curve on page load) */
   pnlHistory: () => get<PnlHistoryResponse>("/api/pnl-history"),
@@ -112,4 +198,14 @@ export const api = {
 
   /** Trigger immediate market re-discovery from Polymarket */
   refreshMarkets: () => post<RefreshMarketsResponse>("/api/markets/refresh"),
+
+  /** Full analytics: win rate, profit factor, by-asset breakdown */
+  analytics: () => get<AnalyticsResponse>("/api/analytics"),
+
+  /** Database statistics */
+  dbStats: () => get<DbStatsResponse>("/api/db/stats"),
+
+  /** Export trades as CSV download */
+  exportTradesCsv: () =>
+    fetch(`${BASE}/api/trades/export`).then((r) => r.text()),
 } as const;

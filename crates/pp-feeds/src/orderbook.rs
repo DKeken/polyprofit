@@ -76,22 +76,22 @@ async fn connect_and_stream(state: &Arc<AppState>) -> Result<()> {
 
     let (mut write, mut read) = ws.split();
 
-    // Subscribe to all active markets (reads current snapshot on each reconnect)
-    let market_ids: Vec<String> = state
+    // Subscribe to all active market outcome tokens (CLOB WS expects asset/token IDs)
+    let asset_ids: Vec<String> = state
         .markets
         .iter()
         .filter(|m| m.active)
-        .map(|m| m.condition_id.0.clone())
+        .flat_map(|m| [m.token_yes.0.clone(), m.token_no.0.clone()])
         .collect();
 
-    if market_ids.is_empty() {
-        warn!("No active markets to subscribe orderbooks for, waiting 10s...");
+    if asset_ids.is_empty() {
+        warn!("No active market asset IDs to subscribe orderbooks for, waiting 10s...");
         tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         return Ok(());
     }
 
     // Subscribe in batches (CLOB WS supports multiple assets per sub)
-    for chunk in market_ids.chunks(20) {
+    for chunk in asset_ids.chunks(20) {
         let sub = serde_json::json!({
             "type": "subscribe",
             "channel": "book",
@@ -99,10 +99,10 @@ async fn connect_and_stream(state: &Arc<AppState>) -> Result<()> {
         });
         write.send(Message::Text(sub.to_string().into())).await?;
     }
-    info!(count = market_ids.len(), "Subscribed to orderbooks");
+    info!(count = asset_ids.len(), "Subscribed to orderbook asset IDs");
 
     let mut last_real_data = Instant::now();
-    let mut known_market_count = market_ids.len();
+    let mut known_market_count = asset_ids.len();
 
     // Periodic check: if market count increased, force reconnect to re-subscribe
     let mut resub_check = tokio::time::interval(std::time::Duration::from_secs(30));
@@ -158,14 +158,8 @@ async fn connect_and_stream(state: &Arc<AppState>) -> Result<()> {
 fn handle_book_message(state: &Arc<AppState>, text: &str) -> Result<()> {
     let msg: BookMessage = serde_json::from_str(text)?;
 
-    if msg.asset_id.is_empty() && msg.market.is_empty() {
+    let Some(condition_id) = resolve_condition_id(state, &msg) else {
         return Ok(());
-    }
-
-    let id = if !msg.market.is_empty() {
-        msg.market
-    } else {
-        msg.asset_id
     };
 
     let best_bid = msg
@@ -200,7 +194,26 @@ fn handle_book_message(state: &Arc<AppState>, text: &str) -> Result<()> {
         updated_at: Utc::now(),
     };
 
-    state.orderbooks.insert(ConditionId(id), ob);
+    state.orderbooks.insert(condition_id, ob);
 
     Ok(())
+}
+
+fn resolve_condition_id(state: &Arc<AppState>, msg: &BookMessage) -> Option<ConditionId> {
+    if !msg.market.is_empty() && state.markets.contains_key(&ConditionId(msg.market.clone())) {
+        return Some(ConditionId(msg.market.clone()));
+    }
+
+    if msg.asset_id.is_empty() {
+        return None;
+    }
+
+    state
+        .markets
+        .iter()
+        .find(|entry| {
+            let market = entry.value();
+            market.token_yes.0 == msg.asset_id || market.token_no.0 == msg.asset_id
+        })
+        .map(|entry| entry.value().condition_id.clone())
 }

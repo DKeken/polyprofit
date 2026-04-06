@@ -5,11 +5,12 @@ use std::sync::Arc;
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{State, WebSocketUpgrade};
 use axum::response::IntoResponse;
+use futures::{SinkExt, StreamExt};
 use rust_decimal::Decimal;
 use tracing::{debug, warn};
 use ts_rs::TS;
 
-use pp_core::{AppState, ConditionId, Mode};
+use pp_core::{AppState, ConditionId};
 
 /// Maximum display length for market question text (chars).
 const QUESTION_DISPLAY_LEN: usize = 40;
@@ -24,36 +25,64 @@ pub async fn ws_handler(
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
+async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     debug!("WebSocket client connected");
 
+    let (mut sender, mut receiver) = socket.split();
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
     let mut ping_counter: u64 = 0;
 
     loop {
-        interval.tick().await;
-        ping_counter += 1;
-
-        // Send a ping every 30s to detect dead connections
-        if ping_counter % 30 == 0 {
-            if socket.send(Message::Ping(vec![].into())).await.is_err() {
-                debug!("WebSocket client disconnected (ping failed)");
-                break;
+        tokio::select! {
+            msg = receiver.next() => {
+                match msg {
+                    Some(Ok(Message::Ping(data))) => {
+                        if sender.send(Message::Pong(data)).await.is_err() {
+                            debug!("WebSocket client disconnected (pong failed)");
+                            break;
+                        }
+                    }
+                    Some(Ok(Message::Pong(_))) => {}
+                    Some(Ok(Message::Close(_))) => {
+                        debug!("WebSocket client disconnected (close frame)");
+                        break;
+                    }
+                    Some(Ok(Message::Text(_))) | Some(Ok(Message::Binary(_))) => {}
+                    Some(Err(e)) => {
+                        debug!("WebSocket client disconnected (receive error): {e}");
+                        break;
+                    }
+                    None => {
+                        debug!("WebSocket client disconnected (stream ended)");
+                        break;
+                    }
+                }
             }
-        }
+            _ = interval.tick() => {
+                ping_counter += 1;
 
-        let tick = build_tick(&state);
-        let json = match serde_json::to_string(&tick) {
-            Ok(j) => j,
-            Err(e) => {
-                warn!("WS serialize error: {e}");
-                continue;
+                // Send a ping every 30s to detect dead connections
+                if ping_counter % 30 == 0 {
+                    if sender.send(Message::Ping(vec![].into())).await.is_err() {
+                        debug!("WebSocket client disconnected (ping failed)");
+                        break;
+                    }
+                }
+
+                let tick = build_tick(&state);
+                let json = match serde_json::to_string(&tick) {
+                    Ok(j) => j,
+                    Err(e) => {
+                        warn!("WS serialize error: {e}");
+                        continue;
+                    }
+                };
+
+                if sender.send(Message::Text(json.into())).await.is_err() {
+                    debug!("WebSocket client disconnected");
+                    break;
+                }
             }
-        };
-
-        if socket.send(Message::Text(json.into())).await.is_err() {
-            debug!("WebSocket client disconnected");
-            break;
         }
     }
 }
@@ -128,6 +157,7 @@ struct PositionInfo {
 #[ts(export)]
 struct Tick {
     daily_pnl: String,
+    total_pnl: String,
     paused: bool,
     heartbeat_alive: bool,
     positions: usize,
@@ -150,7 +180,6 @@ struct Tick {
     orders_placed: u64,
     #[ts(type = "number")]
     orders_cancelled: u64,
-    mode: String,
     prices: HashMap<String, PriceInfo>,
     config: ConfigSnapshot,
     drawdown_pct: f64,
@@ -272,9 +301,8 @@ fn build_tick(state: &Arc<AppState>) -> Tick {
     let trades = state.trades.read();
 
     // Compute win rate from realized trades (those with pnl set)
-    let realized: Vec<_> = trades.iter().filter(|t| t.pnl.is_some()).collect();
-    let total_realized = realized.len() as u64;
-    let wins = realized
+    let total_realized = trades.iter().filter(|t| t.pnl.is_some()).count() as u64;
+    let wins = trades
         .iter()
         .filter(|t| t.pnl.map(|p| p > Decimal::ZERO).unwrap_or(false))
         .count() as f64;
@@ -283,6 +311,12 @@ fn build_tick(state: &Arc<AppState>) -> Tick {
     } else {
         0.0
     };
+
+    let total_pnl = trades
+        .iter()
+        .filter_map(|t| t.pnl)
+        .fold(Decimal::ZERO, |acc, pnl| acc + pnl)
+        .to_string();
 
     // Recent trades for display
     let recent_trades: Vec<TradeInfo> = trades
@@ -306,13 +340,9 @@ fn build_tick(state: &Arc<AppState>) -> Tick {
     let balance_cents = state.current_balance_cents();
     let balance = format!("{:.2}", balance_cents as f64 / 100.0);
 
-    let mode_str = match state.mode {
-        Mode::Demo => "Demo",
-        Mode::Live => "Live",
-    };
-
     Tick {
         daily_pnl: state.daily_pnl_dec().to_string(),
+        total_pnl,
         paused: state.is_paused(),
         heartbeat_alive: state.is_heartbeat_alive(),
         positions: state.positions.len(),
@@ -328,7 +358,6 @@ fn build_tick(state: &Arc<AppState>) -> Tick {
         total_trades: total_realized,
         orders_placed: state.metrics.orders_placed.load(Ordering::Relaxed),
         orders_cancelled: state.metrics.orders_cancelled.load(Ordering::Relaxed),
-        mode: mode_str.to_string(),
         prices: build_prices(state),
         config: build_config_snapshot(state),
         drawdown_pct: drawdown_pct(state),

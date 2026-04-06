@@ -248,6 +248,10 @@ let signed = clob.sign(&signer, order).await?;
 let resp = clob.post_order(signed).await?;
 ```
 
+> В production runtime этот шаг обычно оборачивают в auto-signing layer: приложение само вызывает signer backend перед `post_order`, но это всё ещё реальная EIP-712 подпись, а не signerless trading.
+
+> L2 API credentials (`POLYMARKET_API_KEY` / `POLYMARKET_SECRET` / `POLYMARKET_PASSPHRASE`) нужны для authenticated CLOB requests, но сами по себе не заменяют wallet signer.
+
 ### Rust: Лимитный ордер POST-ONLY (гарантия maker, 0% fee)
 
 ```rust
@@ -277,6 +281,8 @@ let order = clob.market_order()
 let signed = clob.sign(&signer, order).await?;
 let resp = clob.post_order(signed).await?;
 ```
+
+> Даже для gasless / relayed execution пользовательский order payload остаётся подписанным. Auto-signing = автоматический вызов signer backend, а не отказ от подписи.
 
 ### Rust: GTD ордер (с expiration)
 

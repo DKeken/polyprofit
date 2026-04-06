@@ -2,9 +2,9 @@
 
 Автоматизированный торговый бот для [Polymarket](https://polymarket.com/) — предикшн-маркетов на блокчейне Polygon. Использует ценовой арбитраж между оракулами Chainlink/Binance и рыночными ценами Polymarket для генерации прибыли.
 
-**Backend:** Rust (edition 2024) — Cargo workspace из 7 крейтов  
-**Frontend:** React 19 + Vite 8 + Tailwind 4 + Recharts  
-**Режимы:** Demo (симуляция) / Live (реальные ордера через CLOB SDK)
+**Backend:** Rust (edition 2024) — Cargo workspace из 7 крейтов
+**Frontend:** React 19 + Vite 8 + Tailwind 4 + Recharts
+**Runtime:** real-only execution через Polymarket CLOB SDK
 
 ---
 
@@ -17,7 +17,7 @@
 - [Архитектура](#архитектура)
 - [API эндпоинты](#api-эндпоинты)
 - [Фронтенд](#фронтенд)
-- [Переход на Live](#переход-на-live)
+- [Запуск с реальным исполнением](#запуск-с-реальным-исполнением)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -30,7 +30,7 @@
 | **Node.js** | 18+ | Frontend сборка |
 | **npm** | 9+ | Пакетный менеджер |
 
-Для Live-режима дополнительно:
+Дополнительно для запуска runtime:
 - Polymarket аккаунт с USDC на Polygon
 - Private key кошелька (MetaMask export или новый)
 - ~0.5 POL для gas (если EOA wallet)
@@ -82,7 +82,6 @@ cargo test --workspace
 ### `config.toml` — параметры стратегии и поведения
 
 ```toml
-mode = "Demo"            # "Demo" или "Live"
 chain_id = 137           # Polygon mainnet
 
 [strategy]
@@ -125,48 +124,52 @@ keywords = ["doge", "dogecoin"]
 
 ```env
 POLYMARKET_PRIVATE_KEY=0xYOUR_PRIVATE_KEY_HERE
+# optional: reuse existing API credentials instead of deriving them on startup
+# POLYMARKET_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+# POLYMARKET_SECRET=...
+# POLYMARKET_PASSPHRASE=...
 ```
 
-Нужен **только** для Live-режима. В Demo `.env` можно не трогать.
+`POLYMARKET_PRIVATE_KEY` — это именно EVM wallet private key (32-byte hex, `0x...`).
+Если у вас уже есть Polymarket API key bundle, кладите UUID в `POLYMARKET_API_KEY`, а не в `POLYMARKET_PRIVATE_KEY`.
+Backend аутентифицируется через Polymarket CLOB SDK при старте и всё равно требует wallet signer для order signing.
 
 ---
 
 ## Запуск
 
-### Demo-режим (рекомендуется начать с него)
+### Запуск runtime
 
 ```bash
-# Убедиться что mode = "Demo" в config.toml
 cargo run --release
 ```
 
 Бот запустится и:
 1. Загрузит рынки с Gamma API
 2. Подключится к RTDS (live цены Binance/Chainlink)
-3. Начнёт генерировать торговые сигналы
-4. Симулирует исполнение ордеров
+3. Аутентифицируется через Polymarket CLOB SDK
+4. Начнёт генерировать и исполнять реальные торговые сигналы
 5. Поднимет dashboard на `http://localhost:3000`
 
 Логи в формате JSON — ожидаемый вывод:
 
 ```
 {"level":"INFO","message":"polyprofit starting..."}
-{"level":"INFO","message":"Config loaded","mode":"Demo"}
-{"level":"INFO","message":"Demo mode — SDK disabled"}
+{"level":"INFO","message":"Config loaded","chain_id":137}
+{"level":"INFO","message":"CLOB client authenticated"}
 {"level":"INFO","message":"Initial markets discovered","count":47}
 {"level":"INFO","message":"Server listening","addr":"0.0.0.0:3000"}
 ```
 
-### Live-режим
+### Запуск runtime
 
 ```bash
-# 1. Установить mode = "Live" в config.toml
-# 2. Прописать реальный ключ в .env
-# 3. Запустить
+# 1. Прописать реальный ключ в .env
+# 2. Запустить
 cargo run --release
 ```
 
-Бот аутентифицируется через Polymarket CLOB SDK и начнёт размещать реальные ордера.
+Бот аутентифицируется через Polymarket CLOB SDK и начинает работать в единственном реальном runtime.
 
 ### Остановка
 
@@ -204,11 +207,11 @@ polyprofit/
 
 | Задача | Крейт | Описание |
 |---|---|---|
-| **RTDS Feed** | pp-feeds | Live цены через WebSocket |
+| **RTDS Feed** | pp-feeds | Цены через WebSocket |
 | **Orderbook Feed** | pp-feeds | Глубина стакана |
 | **Heartbeat** | pp-execution | Keepalive CLOB соединения |
 | **Signal Loop** | pp-strategy | Генерация торговых сигналов |
-| **Executor** | pp-execution | Исполнение ордеров (demo/live) |
+| **Executor** | pp-execution | Исполнение ордеров |
 | **Maker Loop** | pp-execution | Пассивные лимитные ордера |
 | **Discovery Refresh** | pp-discovery | Периодическое обновление рынков |
 | **Redeem** | pp-execution | Погашение выигравших позиций |
@@ -281,23 +284,19 @@ npm run build
 
 ---
 
-## Переход на Live
+## Запуск с реальным исполнением
 
 ### Чеклист
 
-1. **Demo стабилен** — 50+ сигналов без ошибок
-2. **Win rate > 55%** на демо-данных
-3. **USDC на кошельке** — минимум $100 на Polygon
-4. **POL для gas** — ~0.5 POL (если EOA wallet)
-5. **Token Allowances** — одноразовый approve USDC + Conditional Tokens (только для EOA; proxy wallets — автоматически)
-6. **Risk лимиты** — `daily_loss_limit` настроен
+1. **USDC на кошельке** — минимум $100 на Polygon
+2. **POL для gas** — ~0.5 POL (если EOA wallet)
+3. **Token Allowances** — одноразовый approve USDC + Conditional Tokens (только для EOA; proxy wallets — автоматически)
+4. **Risk лимиты** — `daily_loss_limit` настроен
+5. **Verification** — `make verify` проходит без ошибок
 
-### Переключение
+### Запуск
 
 ```bash
-# config.toml
-mode = "Live"
-
 # .env
 POLYMARKET_PRIVATE_KEY=0x<ваш_реальный_ключ>
 ```
@@ -334,7 +333,7 @@ cargo run --release
 
 | Переменная | Обязательная | Описание |
 |---|---|---|
-| `POLYMARKET_PRIVATE_KEY` | Только Live | Приватный ключ кошелька (0x...) |
+| `POLYMARKET_PRIVATE_KEY` | Да | Приватный ключ кошелька (0x...) |
 | `RUST_LOG` | Нет | Уровень логов (`info`, `debug`, `trace`) |
 
 Пример с verbose логами:
@@ -356,7 +355,7 @@ RUST_LOG=debug cargo run --release
 | `Order rejected: post_only` | Ордер исполнился бы сразу | Нормально — retry/skip |
 | Высокий reject rate (>20%) | Конкуренция, stale prices | Уменьшить `min_edge` или `Balanced` strategy |
 | Win rate < 50% | Слабый edge | Увеличить `min_edge` до 0.15 |
-| `POLYMARKET_PRIVATE_KEY must be set` | Нет `.env` в Live mode | Создать `.env` с ключом |
+| `POLYMARKET_PRIVATE_KEY must be set` | Нет `.env` или переменная не экспортирована | Создать `.env` с ключом |
 | Порт 3000 занят | Другой процесс | Изменить `[server] port` в `config.toml` |
 | Frontend не обновляется | Старый билд | `cd frontend && npm run build` |
 

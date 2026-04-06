@@ -1,0 +1,289 @@
+/**
+ * TradeFeed — Polymarket-style trade activity feed with bottom tab navigation.
+ * Full left column with 4 views: Predictions, Tokens, Search, My Positions.
+ */
+
+import { useState, useMemo } from "react";
+import type { Tick } from "@server-bindings/Tick";
+import type { TradeInfo } from "@server-bindings/TradeInfo";
+import type { PositionInfo } from "@server-bindings/PositionInfo";
+import Markets from "./Markets";
+
+function timeAgo(ts: string | undefined): string {
+  if (!ts) return "";
+  const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (diff < 0 || isNaN(diff)) return "now";
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function formatAge(secs: number): string {
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
+
+function TradeRow({ trade }: { trade: TradeInfo }) {
+  const pnl = trade.pnl ? parseFloat(trade.pnl) : null;
+  const isYes = trade.side === "YES" || trade.side === "Yes" || trade.side === "Buy";
+  const sign = pnl !== null && pnl >= 0 ? "+" : "";
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-zinc-800/30 transition-colors border-b border-zinc-800/20">
+      <span className={`shrink-0 w-10 py-1 rounded text-[10px] font-bold font-mono text-center uppercase ${
+        isYes ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"
+      }`}>
+        {isYes ? "Buy" : "Sell"}
+      </span>
+      <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700/50 flex items-center justify-center shrink-0">
+        <span className="text-[10px] font-mono text-zinc-500">
+          {(trade.market || "?")[0].toUpperCase()}
+        </span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] text-zinc-200 truncate leading-tight">
+          {trade.market || "Unknown market"}
+        </div>
+        <div className="text-[10px] text-zinc-500 mt-0.5 font-mono">{trade.side ?? "Buy"}</div>
+      </div>
+      <div className="shrink-0 text-[11px] font-mono text-zinc-500 w-14 text-right">
+        {timeAgo(trade.ts)}
+      </div>
+      <div className="shrink-0 text-right w-20">
+        {pnl !== null && (
+          <div className={`text-[13px] font-mono font-semibold ${pnl >= 0 ? "text-profit" : "text-loss"}`}>
+            {sign}${Math.abs(pnl).toFixed(2)}
+          </div>
+        )}
+        {trade.size && (
+          <div className="text-[10px] text-zinc-600 font-mono">{trade.size} shares</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PositionRow({ pos }: { pos: PositionInfo }) {
+  const isYes = pos.side === "YES" || pos.side === "Yes" || pos.side === "Buy";
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-zinc-800/30 transition-colors border-b border-zinc-800/20">
+      <span className={`shrink-0 w-10 py-1 rounded text-[10px] font-bold font-mono text-center uppercase ${
+        isYes ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"
+      }`}>
+        {isYes ? "Yes" : "No"}
+      </span>
+      <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700/50 flex items-center justify-center shrink-0">
+        <span className="text-[10px] font-mono text-zinc-500">
+          {(pos.market || pos.condition_id || "?")[0].toUpperCase()}
+        </span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] text-zinc-200 truncate leading-tight">
+          {pos.market || pos.condition_id.slice(0, 12)}
+        </div>
+        <div className="text-[10px] text-zinc-500 mt-0.5 font-mono">
+          entry: ${pos.entry_price ?? "?"}
+        </div>
+      </div>
+      <div className="shrink-0 text-[11px] font-mono text-zinc-500 w-14 text-right">
+        {formatAge(pos.age_secs)}
+      </div>
+      <div className="shrink-0 text-right w-20">
+        <div className="text-[13px] font-mono text-zinc-300">{pos.size ?? "?"}</div>
+        <div className="text-[10px] text-zinc-600 font-mono">shares</div>
+      </div>
+    </div>
+  );
+}
+
+type FeedTab = "predictions" | "tokens" | "search" | "positions";
+
+export default function TradeFeed({
+  trades,
+  positions,
+  totalTrades,
+  tick,
+}: {
+  trades: TradeInfo[];
+  positions: PositionInfo[];
+  totalTrades: number;
+  tick: Tick;
+}) {
+  const [tab, setTab] = useState<FeedTab>("predictions");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter trades by search query
+  const filteredTrades = useMemo(() => {
+    if (!searchQuery.trim()) return trades;
+    const q = searchQuery.toLowerCase();
+    return trades.filter(t => (t.market || "").toLowerCase().includes(q));
+  }, [trades, searchQuery]);
+
+  const filteredPositions = useMemo(() => {
+    if (!searchQuery.trim()) return positions;
+    const q = searchQuery.toLowerCase();
+    return positions.filter(p =>
+      (p.market || p.condition_id || "").toLowerCase().includes(q)
+    );
+  }, [positions, searchQuery]);
+
+  // Tab header info
+  const headerText: Record<FeedTab, string> = {
+    predictions: "Activity",
+    tokens: "Tokens",
+    search: "Search",
+    positions: "My Positions",
+  };
+
+  const statsText: Record<FeedTab, string> = {
+    predictions: `${totalTrades} trades · ${positions.length} open`,
+    tokens: `${tick.markets ?? 0} markets`,
+    search: `${filteredTrades.length} trades · ${filteredPositions.length} positions`,
+    positions: `${positions.length} open positions`,
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="shrink-0 px-4 py-2.5 border-b border-zinc-800/40 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400">
+            {headerText[tab]}
+          </span>
+          <span className="text-[10px] font-mono text-zinc-600">
+            {statsText[tab]}
+          </span>
+        </div>
+      </div>
+
+      {/* Search bar — only for search tab */}
+      {tab === "search" && (
+        <div className="shrink-0 px-4 py-2 border-b border-zinc-800/30">
+          <input
+            type="text"
+            placeholder="Search markets..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-3 py-1.5 text-[12px] font-mono text-zinc-200 placeholder-zinc-600 outline-none focus:border-zinc-600 transition-colors"
+          />
+        </div>
+      )}
+
+      {/* Column headers — for predictions and search tabs */}
+      {(tab === "predictions" || tab === "search" || tab === "positions") && (
+        <div className="shrink-0 flex items-center gap-3 px-4 py-1.5 text-[10px] font-mono uppercase tracking-wider text-zinc-600 border-b border-zinc-800/30">
+          <span className="w-10">Type</span>
+          <span className="w-8" />
+          <span className="flex-1">Market</span>
+          <span className="w-14 text-right">Time</span>
+          <span className="w-20 text-right">Amount</span>
+        </div>
+      )}
+
+      {/* Scrollable feed */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {tab === "predictions" && (
+          trades.length === 0 && positions.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-zinc-600 text-sm font-mono">
+              Waiting for trades...
+            </div>
+          ) : (
+            <>
+              {positions.map((pos, i) => (
+                <PositionRow key={`pos-${pos.condition_id}-${i}`} pos={pos} />
+              ))}
+              {trades.map((trade, i) => (
+                <TradeRow key={`trade-${trade.ts}-${i}`} trade={trade} />
+              ))}
+            </>
+          )
+        )}
+
+        {tab === "tokens" && (
+          <Markets />
+        )}
+
+        {tab === "search" && (
+          filteredTrades.length === 0 && filteredPositions.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-zinc-600 text-sm font-mono">
+              {searchQuery.trim() ? "No results found" : "Type to search trades & positions"}
+            </div>
+          ) : (
+            <>
+              {filteredPositions.map((pos, i) => (
+                <PositionRow key={`pos-${pos.condition_id}-${i}`} pos={pos} />
+              ))}
+              {filteredTrades.map((trade, i) => (
+                <TradeRow key={`trade-${trade.ts}-${i}`} trade={trade} />
+              ))}
+            </>
+          )
+        )}
+
+        {tab === "positions" && (
+          positions.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-zinc-600 text-sm font-mono">
+              No open positions
+            </div>
+          ) : (
+            positions.map((pos, i) => (
+              <PositionRow key={`pos-${pos.condition_id}-${i}`} pos={pos} />
+            ))
+          )
+        )}
+      </div>
+
+      {/* Bottom nav — 4 real tabs */}
+      <div className="shrink-0 border-t border-zinc-800/40 px-2 py-2 flex items-center justify-around">
+        <NavButton
+          active={tab === "predictions"}
+          onClick={() => setTab("predictions")}
+          icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>}
+          label="Predictions"
+        />
+        <NavButton
+          active={tab === "tokens"}
+          onClick={() => setTab("tokens")}
+          icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>}
+          label="Tokens"
+        />
+        <NavButton
+          active={tab === "search"}
+          onClick={() => setTab("search")}
+          icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>}
+          label="Search"
+        />
+        <NavButton
+          active={tab === "positions"}
+          onClick={() => setTab("positions")}
+          icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>}
+          label="My Positions"
+        />
+      </div>
+    </div>
+  );
+}
+
+function NavButton({ active, onClick, icon, label }: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-[10px] font-mono transition-colors ${
+        active ? "text-zinc-200 bg-zinc-800/50" : "text-zinc-500 hover:text-zinc-400"
+      }`}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}

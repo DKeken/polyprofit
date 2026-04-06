@@ -1,0 +1,22 @@
+- generic [ref=e5]:
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - heading "polymarket arb" [level=1] [ref=e9]
+      - generic [ref=e10]: Disconnected
+    - generic [ref=e12]:
+      - button "Pause" [ref=e13]
+      - button "Kill" [ref=e14]
+      - generic [ref=e15]: "|"
+      - generic [ref=e16]: uptime 00:00:00
+      - generic [ref=e17]
+      - button "Settings" [ref=e19]
+  - generic [ref=e23]:
+    - generic [ref=e25]:
+      - generic [ref=e27]
+      - generic [ref=e30]
+      - generic [ref=e36]: Waiting for trades...
+      - generic [ref=e37]
+    - generic [ref=e58]:
+      - generic [ref=e59]
+      - generic [ref=e78]
+      - generic [ref=e93]

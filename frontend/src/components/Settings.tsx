@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { BotConfig } from "../hooks/useBot";
 import type { AssetDefInfo } from "@server-bindings/AssetDefInfo";
 
@@ -14,48 +14,39 @@ interface FieldDef {
   type: "decimal" | "integer" | "select";
   options?: string[];
   hint?: string;
+  icon?: string;
 }
 
 const FIELDS: FieldDef[] = [
-  // Strategy
-  { key: "min_edge", label: "Min Edge", group: "strategy", type: "decimal", hint: "Minimum edge to trade (0.01-0.50)" },
-  { key: "min_prob", label: "Min Prob", group: "strategy", type: "decimal", hint: "Lower bound (0.01-0.99)" },
-  { key: "max_prob", label: "Max Prob", group: "strategy", type: "decimal", hint: "Upper bound (0.01-0.99)" },
-  { key: "max_spread", label: "Max Spread", group: "strategy", type: "decimal", hint: "Skip wide spreads" },
-  { key: "order_strategy", label: "Strategy", group: "strategy", type: "select", options: ["Passive", "Balanced", "Aggressive"] },
-  { key: "market_refresh_secs", label: "Refresh (s)", group: "strategy", type: "integer", hint: "Market discovery interval" },
-  // Risk
-  { key: "daily_loss_limit", label: "Loss Limit", group: "risk", type: "decimal", hint: "Negative value, e.g. -100" },
-  { key: "daily_profit_cap", label: "Profit Cap", group: "risk", type: "decimal", hint: "Stop trading after this P&L" },
-  { key: "max_position_pct", label: "Max Pos %", group: "risk", type: "decimal", hint: "Per-trade size (0-1)" },
-  { key: "max_concurrent", label: "Max Positions", group: "risk", type: "integer" },
-  { key: "drawdown_limit", label: "Drawdown Limit", group: "risk", type: "decimal", hint: "0-1, e.g. 0.20 = 20%" },
-  { key: "adverse_fill_pause", label: "Adverse Pause", group: "risk", type: "integer", hint: "Pause after N adverse fills" },
+  { key: "min_edge", label: "Min Edge", group: "strategy", type: "decimal", hint: "0.01–0.50", icon: "📐" },
+  { key: "min_prob", label: "Min Probability", group: "strategy", type: "decimal", hint: "0.01–0.99", icon: "📉" },
+  { key: "max_prob", label: "Max Probability", group: "strategy", type: "decimal", hint: "0.01–0.99", icon: "📈" },
+  { key: "max_spread", label: "Max Spread", group: "strategy", type: "decimal", hint: "Skip wide spreads", icon: "↔" },
+  { key: "order_strategy", label: "Order Strategy", group: "strategy", type: "select", options: ["Passive", "Balanced", "Aggressive"], icon: "⚡" },
+  { key: "market_refresh_secs", label: "Market Refresh", group: "strategy", type: "integer", hint: "seconds", icon: "🔄" },
+  { key: "daily_loss_limit", label: "Daily Loss Limit", group: "risk", type: "decimal", hint: "Negative, e.g. -100", icon: "🛑" },
+  { key: "daily_profit_cap", label: "Daily Profit Cap", group: "risk", type: "decimal", hint: "Stop after this P&L", icon: "🎯" },
+  { key: "max_position_pct", label: "Max Position Size", group: "risk", type: "decimal", hint: "0–1 (fraction)", icon: "📊" },
+  { key: "max_concurrent", label: "Max Concurrent", group: "risk", type: "integer", hint: "Parallel positions", icon: "🔢" },
+  { key: "drawdown_limit", label: "Drawdown Limit", group: "risk", type: "decimal", hint: "0–1 (e.g. 0.20 = 20%)", icon: "📉" },
+  { key: "adverse_fill_pause", label: "Adverse Fill Pause", group: "risk", type: "integer", hint: "Pause N trades", icon: "⏸" },
 ];
 
 const EMPTY_DEF: AssetDefInfo = { symbol: "", binance_symbol: "", keywords: [] };
 
 export default function Settings({ config, onSave }: Props) {
-  const [draft, setDraft] = useState<Record<string, string>>({});
-  const [draftAssets, setDraftAssets] = useState<string[]>([]);
-  const [draftDefs, setDraftDefs] = useState<AssetDefInfo[]>([]);
+  const initialDraft = Object.fromEntries(
+    FIELDS.map((f) => [f.key, String(config[f.key])]),
+  ) as Record<string, string>;
+
+  const [draft, setDraft] = useState<Record<string, string>>(initialDraft);
+  const [draftAssets, setDraftAssets] = useState<string[]>([...config.assets]);
+  const [draftDefs, setDraftDefs] = useState<AssetDefInfo[]>(
+    config.asset_definitions?.map((d) => ({ ...d })) ?? [],
+  );
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
-  // Sync draft with incoming config
-  useEffect(() => {
-    const d: Record<string, string> = {};
-    for (const f of FIELDS) {
-      d[f.key] = String(config[f.key]);
-    }
-    setDraft(d);
-    setDraftAssets([...config.assets]);
-    if (config.asset_definitions?.length) {
-      setDraftDefs(config.asset_definitions.map((d) => ({ ...d })));
-    }
-  }, [config]);
-
-  // Known assets = all symbols from definitions (draft version for real-time)
   const knownAssets = draftDefs.map((d) => d.symbol).filter(Boolean);
 
   const fieldChanged = FIELDS.filter(
@@ -75,9 +66,7 @@ export default function Settings({ config, onSave }: Props) {
 
   function toggleAsset(asset: string) {
     setDraftAssets((prev) =>
-      prev.includes(asset)
-        ? prev.filter((a) => a !== asset)
-        : [...prev, asset],
+      prev.includes(asset) ? prev.filter((a) => a !== asset) : [...prev, asset],
     );
   }
 
@@ -96,7 +85,6 @@ export default function Settings({ config, onSave }: Props) {
   function removeDef(idx: number) {
     const symbol = draftDefs[idx].symbol;
     setDraftDefs((prev) => prev.filter((_, i) => i !== idx));
-    // Also remove from active assets if present
     if (symbol) {
       setDraftAssets((prev) => prev.filter((a) => a !== symbol));
     }
@@ -116,14 +104,14 @@ export default function Settings({ config, onSave }: Props) {
         updates[f.key] = val;
       }
     }
-    if (assetsChanged) {
-      updates.assets = draftAssets;
-    }
+    if (assetsChanged) updates.assets = draftAssets;
     if (defsChanged) {
       updates.asset_definitions = draftDefs.map((d) => ({
         symbol: d.symbol.trim().toUpperCase(),
         binance_symbol: d.binance_symbol.trim().toUpperCase(),
-        keywords: d.keywords.map((k) => k.trim().toLowerCase()).filter(Boolean),
+        keywords: d.keywords
+          .map((k) => k.trim().toLowerCase())
+          .filter(Boolean),
       }));
     }
 
@@ -138,8 +126,10 @@ export default function Settings({ config, onSave }: Props) {
         setMsg(`Saved ${res.changes?.length ?? 0} changes`);
         setTimeout(() => setMsg(""), 3000);
       }
-    } catch {
-      setMsg("Network error");
+    } catch (error) {
+      setMsg(
+        error instanceof Error ? `Error: ${error.message}` : "Network error",
+      );
     }
     setSaving(false);
   }
@@ -150,13 +140,18 @@ export default function Settings({ config, onSave }: Props) {
 
     if (f.type === "select" && f.options) {
       return (
-        <div key={f.key} className="mb-3">
-          <label className="text-xs text-zinc-500 block mb-1">{f.label}</label>
+        <div key={f.key}>
+          <label className="text-[11px] text-zinc-500 block mb-1.5 font-medium">
+            {f.icon && <span className="mr-1">{f.icon}</span>}
+            {f.label}
+          </label>
           <select
             value={val}
             onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
-            className={`w-full bg-zinc-800 border rounded px-2 py-1.5 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-              isChanged ? "border-emerald-600" : "border-zinc-700"
+            className={`w-full bg-zinc-800/60 border rounded-lg px-3 py-2 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all ${
+              isChanged
+                ? "border-emerald-600/60 bg-emerald-500/5"
+                : "border-zinc-700/60"
             }`}
           >
             {f.options.map((o) => (
@@ -170,19 +165,22 @@ export default function Settings({ config, onSave }: Props) {
     }
 
     return (
-      <div key={f.key} className="mb-3">
-        <label className="text-xs text-zinc-500 block mb-1">
+      <div key={f.key}>
+        <label className="text-[11px] text-zinc-500 block mb-1.5 font-medium">
+          {f.icon && <span className="mr-1">{f.icon}</span>}
           {f.label}
           {f.hint && (
-            <span className="text-zinc-600 ml-1">— {f.hint}</span>
+            <span className="text-zinc-600 ml-1 font-normal">({f.hint})</span>
           )}
         </label>
         <input
           type="text"
           value={val}
           onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
-          className={`w-full bg-zinc-800 border rounded px-2 py-1.5 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-            isChanged ? "border-emerald-600" : "border-zinc-700"
+          className={`w-full bg-zinc-800/60 border rounded-lg px-3 py-2 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all ${
+            isChanged
+              ? "border-emerald-600/60 bg-emerald-500/5"
+              : "border-zinc-700/60"
           }`}
         />
       </div>
@@ -193,88 +191,98 @@ export default function Settings({ config, onSave }: Props) {
   const riskFields = FIELDS.filter((f) => f.group === "risk");
 
   return (
-    <div className="space-y-4">
-      {/* Strategy */}
-      <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4">
-        <h3 className="text-sm text-zinc-400 uppercase tracking-wider mb-3">
-          Strategy
-        </h3>
-        {strategyFields.map(renderField)}
+    <div className="space-y-4 animate-slide-up">
+      {/* Strategy + Risk side by side on wide screens */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Strategy */}
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 card-glow gradient-border">
+          <h3 className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium mb-4">
+            Strategy Parameters
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            {strategyFields.map(renderField)}
+          </div>
+        </div>
+
+        {/* Risk */}
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 card-glow">
+          <h3 className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium mb-4">
+            Risk Management
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            {riskFields.map(renderField)}
+          </div>
+        </div>
       </div>
 
-      {/* Risk */}
-      <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4">
-        <h3 className="text-sm text-zinc-400 uppercase tracking-wider mb-3">
-          Risk
-        </h3>
-        {riskFields.map(renderField)}
-      </div>
-
-      {/* Asset Definitions — full CRUD */}
-      <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm text-zinc-400 uppercase tracking-wider">
+      {/* Asset Definitions */}
+      <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 card-glow">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">
             Asset Definitions
           </h3>
           <button
             onClick={addDef}
-            className="px-3 py-1 rounded text-xs font-medium bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors"
+            className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-700/50 transition-all duration-200"
           >
             + Add Asset
           </button>
         </div>
-        <p className="text-zinc-600 text-xs mb-3">
-          Define crypto assets with their Binance pair and discovery keywords.
-          Changes are saved to the database — no config file editing needed.
-        </p>
 
         {draftDefs.length === 0 ? (
-          <p className="text-zinc-600 text-sm">No assets defined. Click "+ Add Asset" to start.</p>
+          <div className="text-zinc-600 text-sm py-6 text-center">
+            No assets defined. Click "+ Add Asset" to start.
+          </div>
         ) : (
           <div className="space-y-3">
             {draftDefs.map((def, idx) => (
               <div
                 key={idx}
-                className="bg-zinc-800/50 rounded-lg border border-zinc-700/50 p-3"
+                className="bg-zinc-800/30 rounded-lg border border-zinc-700/40 p-4 animate-fade-in"
               >
                 <div className="flex items-start gap-3">
-                  {/* Symbol */}
                   <div className="flex-1 min-w-0">
-                    <label className="text-xs text-zinc-500 block mb-1">Symbol</label>
+                    <label className="text-[11px] text-zinc-500 block mb-1.5 font-medium">
+                      Symbol
+                    </label>
                     <input
                       type="text"
                       value={def.symbol}
                       onChange={(e) => updateDef(idx, "symbol", e.target.value)}
                       placeholder="BTC"
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500 uppercase"
+                      className="w-full bg-zinc-800/60 border border-zinc-700/60 rounded-lg px-3 py-2 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500/40 uppercase transition-all"
                     />
                   </div>
-                  {/* Binance Symbol */}
                   <div className="flex-1 min-w-0">
-                    <label className="text-xs text-zinc-500 block mb-1">Binance Pair</label>
+                    <label className="text-[11px] text-zinc-500 block mb-1.5 font-medium">
+                      Binance Pair
+                    </label>
                     <input
                       type="text"
                       value={def.binance_symbol}
-                      onChange={(e) => updateDef(idx, "binance_symbol", e.target.value)}
+                      onChange={(e) =>
+                        updateDef(idx, "binance_symbol", e.target.value)
+                      }
                       placeholder="BTCUSDT"
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500 uppercase"
+                      className="w-full bg-zinc-800/60 border border-zinc-700/60 rounded-lg px-3 py-2 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500/40 uppercase transition-all"
                     />
                   </div>
-                  {/* Remove button */}
-                  <div className="pt-5">
+                  <div className="pt-6">
                     <button
                       onClick={() => removeDef(idx)}
-                      className="px-2 py-1.5 rounded text-xs text-red-400 hover:bg-red-500/20 transition-colors"
+                      className="px-2.5 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/15 transition-all"
                       title="Remove asset"
                     >
                       ✕
                     </button>
                   </div>
                 </div>
-                {/* Keywords */}
-                <div className="mt-2">
-                  <label className="text-xs text-zinc-500 block mb-1">
-                    Keywords <span className="text-zinc-600">— comma-separated, for market discovery</span>
+                <div className="mt-3">
+                  <label className="text-[11px] text-zinc-500 block mb-1.5 font-medium">
+                    Keywords{" "}
+                    <span className="text-zinc-600 font-normal">
+                      — comma-separated for market discovery
+                    </span>
                   </label>
                   <input
                     type="text"
@@ -283,11 +291,14 @@ export default function Settings({ config, onSave }: Props) {
                       updateDef(
                         idx,
                         "keywords",
-                        e.target.value.split(",").map((k) => k.trim()).filter(Boolean),
+                        e.target.value
+                          .split(",")
+                          .map((k) => k.trim())
+                          .filter(Boolean),
                       )
                     }
                     placeholder="btc, bitcoin"
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="w-full bg-zinc-800/60 border border-zinc-700/60 rounded-lg px-3 py-2 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all"
                   />
                 </div>
               </div>
@@ -296,16 +307,18 @@ export default function Settings({ config, onSave }: Props) {
         )}
       </div>
 
-      {/* Active Assets — toggle buttons from definitions */}
-      <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4">
-        <h3 className="text-sm text-zinc-400 uppercase tracking-wider mb-3">
+      {/* Active Assets */}
+      <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 card-glow">
+        <h3 className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium mb-3">
           Active Assets
         </h3>
-        <p className="text-zinc-600 text-xs mb-2">
-          Select which defined assets the bot should actively trade.
+        <p className="text-zinc-600 text-[11px] mb-3">
+          Select which assets the bot actively trades.
         </p>
         {knownAssets.length === 0 ? (
-          <p className="text-zinc-600 text-sm">Add asset definitions above first.</p>
+          <div className="text-zinc-600 text-sm">
+            Add asset definitions above first.
+          </div>
         ) : (
           <div className="flex flex-wrap gap-2">
             {knownAssets.map((asset) => {
@@ -314,12 +327,13 @@ export default function Settings({ config, onSave }: Props) {
                 <button
                   key={asset}
                   onClick={() => toggleAsset(asset)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 border ${
                     active
-                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-800"
-                      : "bg-zinc-800 text-zinc-500 border-zinc-700 hover:text-zinc-300"
+                      ? "bg-emerald-500/15 text-emerald-400 border-emerald-700/50 shadow-sm shadow-emerald-500/10"
+                      : "bg-zinc-800/60 text-zinc-500 border-zinc-700/50 hover:text-zinc-300 hover:border-zinc-600"
                   }`}
                 >
+                  {active && <span className="mr-1">✓</span>}
                   {asset}
                 </button>
               );
@@ -327,32 +341,42 @@ export default function Settings({ config, onSave }: Props) {
           </div>
         )}
         {draftAssets.length === 0 && knownAssets.length > 0 && (
-          <p className="text-red-400 text-xs mt-2">At least one asset required</p>
+          <p className="text-red-400 text-[11px] mt-2">
+            At least one asset must be active
+          </p>
         )}
       </div>
 
-      {/* Save */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={handleSave}
-          disabled={saving || totalChanges === 0 || draftAssets.length === 0}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            totalChanges > 0 && draftAssets.length > 0
-              ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
-              : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
-          }`}
-        >
-          {saving ? "Saving…" : `Save ${totalChanges} change${totalChanges !== 1 ? "s" : ""}`}
-        </button>
-        {msg && (
-          <span
-            className={`text-xs ${
-              msg.startsWith("Error") ? "text-red-400" : "text-emerald-400"
+      {/* Save Bar */}
+      <div className="sticky bottom-4 z-20">
+        <div className="bg-zinc-900/95 backdrop-blur-sm rounded-xl border border-zinc-800 p-4 flex items-center justify-between shadow-lg shadow-black/20">
+          <div className="flex items-center gap-3">
+            {msg && (
+              <span
+                className={`text-xs animate-fade-in ${
+                  msg.startsWith("Error") ? "text-red-400" : "text-emerald-400"
+                }`}
+              >
+                {msg}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving || totalChanges === 0 || draftAssets.length === 0}
+            className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+              totalChanges > 0 && draftAssets.length > 0
+                ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-700/50 shadow-sm shadow-emerald-500/10"
+                : "bg-zinc-800 text-zinc-600 cursor-not-allowed border border-zinc-700"
             }`}
           >
-            {msg}
-          </span>
-        )}
+            {saving
+              ? "Saving…"
+              : totalChanges > 0
+                ? `Save ${totalChanges} change${totalChanges !== 1 ? "s" : ""}`
+                : "No changes"}
+          </button>
+        </div>
       </div>
     </div>
   );

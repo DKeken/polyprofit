@@ -1,7 +1,7 @@
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
-use crate::types::{Mode, OrderStrategy, RuntimeConfig, Asset};
+use crate::types::{OrderStrategy, RuntimeConfig, Asset};
 
 /// Asset definition from config.toml [[asset_definitions]].
 /// Defines a crypto asset with its Binance symbol and keyword matching rules.
@@ -14,7 +14,6 @@ pub struct AssetDef {
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub mode: Mode,
     pub chain_id: u64,
     pub strategy: StrategyConfig,
     pub risk: RiskConfig,
@@ -175,7 +174,6 @@ mod tests {
     /// Helper: build a valid Config for mutation-based testing.
     fn valid_config() -> Config {
         Config {
-            mode: Mode::Demo,
             chain_id: 137,
             strategy: StrategyConfig {
                 min_edge: dec!(0.05),

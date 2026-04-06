@@ -4,17 +4,210 @@
   --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
   --color-profit: #34d399;
   --color-loss: #f87171;
+  --color-cyan: #22d3ee;
+  --color-amber: #fbbf24;
 }
 
 body {
   margin: 0;
   background: #09090b;
   color: #f4f4f5;
-  font-family: system-ui, sans-serif;
+  font-family: system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* ── Card glow on hover ── */
+.card-glow {
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.card-glow:hover {
+  box-shadow: 0 0 20px -4px rgba(52, 211, 153, 0.08);
+  border-color: #3f3f46;
+}
+
+/* ── Gradient border accent ── */
+.gradient-border {
+  position: relative;
+}
+.gradient-border::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #34d399, transparent);
+  opacity: 0.4;
+  border-radius: 9999px;
+}
+
+/* ── Pulse animation for live dots ── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.animate-pulse-dot {
+  animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ── Fade in animation ── */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+/* ── Slide up animation ── */
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slide-up 0.4s ease-out;
+}
+
+/* ── Toast notification ── */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-12px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-8px) scale(0.96); }
+}
+.toast-enter {
+  animation: toast-in 0.25s ease-out forwards;
+}
+.toast-exit {
+  animation: toast-out 0.2s ease-in forwards;
+}
+
+/* ── Shimmer loading ── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, #27272a 25%, #3f3f46 50%, #27272a 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* ── Number change highlight ── */
+@keyframes number-flash {
+  0% { color: #fbbf24; }
+  100% { color: inherit; }
+}
+.number-flash {
+  animation: number-flash 0.6s ease-out;
+}
+
+/* ── Tab indicator ── */
+.tab-active {
+  position: relative;
+}
+.tab-active::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 25%;
+  right: 25%;
+  height: 2px;
+  background: #34d399;
+  border-radius: 1px;
+}
+
+/* ── Execution log type colors ── */
+.log-eval { color: #22d3ee; }
+.log-exec { color: #34d399; }
+.log-fill { color: #fbbf24; }
+.log-err  { color: #f87171; }
+.log-sys  { color: #a78bfa; }
+
+/* ── Large metric card ── */
+.metric-card {
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.3s ease;
+}
+.metric-card:hover {
+  box-shadow: 0 0 20px rgba(52, 211, 153, 0.08);
+}
+.metric-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: var(--accent-color, #34d399);
+  border-radius: 0 2px 2px 0;
+}
+
+/* ── Terminal scanline effect ── */
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+.terminal-bg {
+  position: relative;
+}
+.terminal-bg::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(to right, transparent, rgba(52, 211, 153, 0.04), transparent);
+  animation: scanline 8s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ── Auto-scroll for log ── */
+.auto-scroll {
+  scroll-behavior: smooth;
+}
+
+/* ── Value update flash ── */
+@keyframes value-update {
+  0% { transform: scale(1.03); color: #fbbf24; }
+  100% { transform: scale(1); }
+}
+.value-updated {
+  animation: value-update 0.4s ease-out;
+}
+
+/* ── Live indicator glow ── */
+@keyframes live-glow {
+  0%, 100% { text-shadow: 0 0 4px rgba(52, 211, 153, 0.6); }
+  50% { text-shadow: 0 0 12px rgba(52, 211, 153, 0.9); }
+}
+.live-indicator {
+  animation: live-glow 2s ease-in-out infinite;
 }

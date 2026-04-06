@@ -15,8 +15,7 @@ const STALE_ORDER_SECS: i64 = 30;
 
 /// Cancel/replace loop for active maker orders.
 /// Runs every 200ms to keep orders fresh and avoid adverse selection.
-/// `client` is Some in Live mode (real cancel calls), None in Demo mode (local tracking only).
-pub async fn maker_loop(state: Arc<AppState>, client: Option<Arc<AuthClient>>) -> Result<()> {
+pub async fn maker_loop(state: Arc<AppState>, client: Arc<AuthClient>) -> Result<()> {
     info!("Maker cancel/replace loop started (interval: {CANCEL_REPLACE_INTERVAL_MS}ms)");
 
     loop {
@@ -28,11 +27,9 @@ pub async fn maker_loop(state: Arc<AppState>, client: Option<Arc<AuthClient>>) -
                     .map(|e| e.key().clone())
                     .collect();
                 if !order_ids.is_empty() {
-                    if let Some(ref clob) = client {
-                        let ids: Vec<&str> = order_ids.iter().map(|s| s.as_str()).collect();
-                        if let Err(e) = clob.cancel_orders(&ids).await {
-                            warn!(error = %e, "Failed to cancel maker orders on shutdown");
-                        }
+                    let ids: Vec<&str> = order_ids.iter().map(|s| s.as_str()).collect();
+                    if let Err(e) = client.cancel_orders(&ids).await {
+                        warn!(error = %e, "Failed to cancel maker orders on shutdown");
                     }
                     for id in &order_ids {
                         state.maker_orders.remove(id);
@@ -85,17 +82,15 @@ pub async fn maker_loop(state: Arc<AppState>, client: Option<Arc<AuthClient>>) -
             }
         }
 
-        // Cancel stale orders via SDK (Live) or just remove locally (Demo)
+        // Cancel stale orders via SDK.
         if !to_cancel.is_empty() {
-            if let Some(ref clob) = client {
-                let ids: Vec<&str> = to_cancel.iter().map(|s| s.as_str()).collect();
-                let start = Instant::now();
-                if let Err(e) = clob.cancel_orders(&ids).await {
-                    warn!(error = %e, "Failed to cancel stale orders via SDK");
-                }
-                let elapsed = start.elapsed();
-                debug!(count = to_cancel.len(), elapsed_ms = elapsed.as_millis(), "Stale orders cancelled via SDK");
+            let ids: Vec<&str> = to_cancel.iter().map(|s| s.as_str()).collect();
+            let start = Instant::now();
+            if let Err(e) = client.cancel_orders(&ids).await {
+                warn!(error = %e, "Failed to cancel stale orders via SDK");
             }
+            let elapsed = start.elapsed();
+            debug!(count = to_cancel.len(), elapsed_ms = elapsed.as_millis(), "Stale orders cancelled via SDK");
 
             for order_id in &to_cancel {
                 state.maker_orders.remove(order_id);
@@ -108,11 +103,9 @@ pub async fn maker_loop(state: Arc<AppState>, client: Option<Arc<AuthClient>>) -
         for order_id in to_update {
             let start = Instant::now();
 
-            if let Some(ref clob) = client {
-                if let Err(e) = clob.cancel_order(&order_id).await {
-                    warn!(order_id = %order_id, error = %e, "Cancel failed");
-                    continue;
-                }
+            if let Err(e) = client.cancel_order(&order_id).await {
+                warn!(order_id = %order_id, error = %e, "Cancel failed");
+                continue;
             }
 
             // Remove stale tracking entry (re-placement happens on next signal)

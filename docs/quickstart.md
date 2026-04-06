@@ -14,7 +14,29 @@
 
 ---
 
+## Для текущего репозитория
+
+Если ты уже работаешь внутри существующего `polyprofit`, **не нужно** заново создавать monorepo или инициализировать crates. В этом репозитории проект уже собран; основной operational path сейчас такой:
+
+```bash
+make verify
+cargo run --release
+```
+
+Что это даёт:
+
+- `make verify` проверяет Rust tests + frontend lint/tests/build
+- `cargo run --release` запускает текущий runtime
+- после старта имеет смысл сделать smoke test Dashboard и Settings flow
+
+Ниже в документе остаются и исторические bootstrap-шаги — они полезны как reference для первоначальной сборки проекта с нуля, но не нужны для повседневной работы с текущей кодовой базой.
+
+---
+
 ## Шаг 1: Инициализация проекта (Cargo Workspace)
+
+> Исторический bootstrap path. Для текущего репозитория обычно пропускается.
+
 
 ```bash
 # Создать monorepo
@@ -50,6 +72,10 @@ npm install -D tailwindcss @tailwindcss/vite
 
 ```env
 POLYMARKET_PRIVATE_KEY=0x...
+# optional: reuse existing API credentials
+# POLYMARKET_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+# POLYMARKET_SECRET=...
+# POLYMARKET_PASSPHRASE=...
 ```
 
 **config.toml** — полный пример в [code/08-main.md → config.toml](./code/08-main.md#configtoml--пример).
@@ -59,6 +85,10 @@ POLYMARKET_PRIVATE_KEY=0x...
 ## Шаг 3: Проверить подключение
 
 Создать минимальный тест: подключиться к RTDS и увидеть цены.
+
+Важно: `POLYMARKET_PRIVATE_KEY` должен быть именно wallet private key. Если у вас есть готовый Polymarket API key bundle, UUID нужно класть в `POLYMARKET_API_KEY`, а не в `POLYMARKET_PRIVATE_KEY`.
+
+Важно: auto-signing в runtime означает, что приложение автоматически вызывает настроенный signer backend при `post_order`, но requirement на EIP-712 signer никуда не исчезает. L2 API credentials (`POLYMARKET_API_KEY` / `POLYMARKET_SECRET` / `POLYMARKET_PASSPHRASE`) аутентифицируют CLOB запросы, но не заменяют wallet signer.
 
 ```rust
 // src/bin/test_rtds.rs
@@ -194,28 +224,48 @@ cargo run --bin test_fee_rate
 
 ---
 
-## Шаг 6: Запуск в Demo режиме
+## Шаг 6: Запуск runtime
 
 ```bash
-# .env: MODE=demo
 cargo run --release
-
-# Должен показать:
-# [INFO] Discovered 47 crypto markets
-# [INFO] RTDS connected
-# [INFO] CLOB WS connected
-# [INFO] Dashboard: http://0.0.0.0:3000
-# [INFO] Signal loop started (demo mode)
-# [DEMO] BUY YES "BTC Up or Down?" @ 0.48 | edge 15.2%
-# [DEMO] BUY NO "Will BTC dip to $64k?" @ 0.35 | edge 12.1%
 ```
 
-**Что проверить в demo:**
+Для **текущего репозитория** ориентируйся не на точное совпадение исторических лог-строк, а на живой runtime:
 
+- backend стартует без panic
+- dashboard открывается
+- tick/state обновляются
+- heartbeat отображается как runtime liveness
+- Settings flow сохраняет config и показывает backend validation errors
+
+**Что проверить:**
+
+- [ ] `make verify` проходит до запуска
+- [ ] Dashboard открывается и показывает live tick/state
 - [ ] RTDS показывает Binance и Chainlink цены
+- [ ] heartbeat выглядит как operational health signal runtime'а
+- [ ] Settings сохраняет изменения и показывает backend validation errors
+- [ ] после reload страницы config совпадает с persisted server state
+- [ ] сигналы/метрики обновляются без залипания UI
 - [ ] Oracle lag 15-55 секунд (проверить в логах)
-- [ ] Сигналы генерируются (хотя бы 10/час)
-- [ ] Win rate > 55% на 50+ сигналах
+
+> Исторические примеры `test_rtds`, `test_gamma`, `test_auth` в этом документе полезны как low-level diagnostics/reference, но основной путь проверки текущего приложения — это `make verify` + runtime smoke test.
+
+---
+
+## Рекомендуемый путь проверки
+
+1. `make verify`
+2. `cargo run --release`
+3. smoke test Dashboard
+4. smoke test Settings/config persistence
+5. только потом — отдельные low-level API diagnostics при необходимости
+
+---
+
+## Исторические низкоуровневые шаги
+
+Ниже и выше по документу сохранены low-level примеры как reference для изолированной диагностики интеграций. Для текущего репозитория они вторичны по сравнению с полным runtime smoke test.
 
 ---
 
@@ -238,18 +288,18 @@ npm run dev
 
 ---
 
-## Шаг 9: Первая Live сделка
+## Шаг 9: Первая реальная сделка
 
 ```bash
-# config.toml: mode = "Live", [risk] daily_loss_limit = -50
+# config.toml: [risk] daily_loss_limit = -50
 # .env: POLYMARKET_PRIVATE_KEY=0x...
 
 cargo run --release
 ```
 
-**Чеклист перед live:**
+**Чеклист перед первым запуском с реальным исполнением:**
 
-- [ ] Demo работал 50+ сигналов без ошибок
+- [ ] `make verify` проходит
 - [ ] Balance на кошельке: минимум $100 USDC
 - [ ] POL на кошельке для gas (если EOA): ~0.5 POL
 - [ ] Daily loss limit установлен

@@ -168,13 +168,13 @@ Signal detected (edge > MIN_EDGE):
 
 ## Масштабирование (Roadmap)
 
-### Фаза 1: Demo ($0, 1-2 дня)
+### Фаза 1: Dry run / verification ($0, 1-2 дня)
 
-- Запуск в demo mode (без реальных денег)
+- Прогнать `make verify` и поднять runtime без panic
 - Проверить signal timing, win rate в логах
 - Убедиться что WS стабильны
 
-### Фаза 2: Micro-Live ($100, 3-5 дней)
+### Фаза 2: Micro-real ($100, 3-5 дней)
 
 - $5/trade, только BTC 15-мин Up/Down
 - Post-only maker orders only

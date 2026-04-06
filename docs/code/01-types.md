@@ -36,7 +36,6 @@ pub struct AppState {
     pub wins: u32,
     pub trades: u32,
     pub cycle: u64,
-    pub mode: Mode,
     pub log: Vec<TradeLog>,
     pub started_at: DateTime<Utc>,
 }
@@ -97,9 +96,6 @@ pub enum MarketKind {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Side { Yes, No }
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum Mode { Demo, Live }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum OrderStrategy { Passive, Balanced, Aggressive }
@@ -181,7 +177,6 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub mode: Mode,
     pub private_key: String,  // из env var, НЕ из файла
     pub chain_id: u64,        // 137 (Polygon)
 

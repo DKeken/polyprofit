@@ -8,72 +8,22 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use tracing::info;
 
-use alloy::signers::Signer;
 use polymarket_client_sdk::clob::types::{Amount, OrderType, Side as SdkSide};
 use polymarket_client_sdk::types::U256;
 
 use pp_core::{AppState, MakerOrder, OrderStrategy, Position, Signal, Side, TradeLog};
-use crate::AuthClient;
+use crate::{AuthClient, AutoSigner};
 
 /// SDK enforces max 2 decimal places on order size (shares).
 const LOT_SIZE_SCALE: u32 = 2;
 
-/// Execute a signal in Demo mode — simulate instant fill.
-pub async fn execute_demo(state: &Arc<AppState>, signal: &Signal) -> Result<()> {
-    let market = state
-        .markets
-        .get(&signal.condition_id)
-        .ok_or_else(|| anyhow::anyhow!("Market not found: {:?}", signal.condition_id))?;
-
-    let token_id = match signal.side {
-        Side::Yes => market.token_yes.clone(),
-        Side::No => market.token_no.clone(),
-    };
-    drop(market);
-
-    let position = Position {
-        condition_id: signal.condition_id.clone(),
-        token_id: token_id.clone(),
-        side: signal.side,
-        size: signal.size_usdc,
-        entry_price: signal.market_price,
-        opened_at: Utc::now(),
-    };
-
-    state.positions.insert(signal.condition_id.clone(), position);
-    state.metrics.orders_placed.fetch_add(1, Ordering::Relaxed);
-    state.metrics.orders_filled.fetch_add(1, Ordering::Relaxed);
-
-    let trade = TradeLog {
-        condition_id: signal.condition_id.clone(),
-        side: signal.side,
-        price: signal.market_price,
-        size: signal.size_usdc,
-        pnl: None,
-        is_adverse: false,
-        timestamp: Utc::now(),
-    };
-
-    state.record_trade(&trade);
-
-    info!(
-        side = %signal.side,
-        price = %signal.market_price,
-        size = %signal.size_usdc,
-        edge = %signal.edge,
-        "[DEMO] Order filled"
-    );
-
-    Ok(())
-}
-
-/// Execute a signal in Live mode — real SDK order placement.
-pub async fn execute_live<S: Signer + Send + Sync>(
+/// Execute a signal via the real SDK order placement path.
+pub async fn execute(
     state: &Arc<AppState>,
     signal: &Signal,
     strategy: OrderStrategy,
     client: &AuthClient,
-    signer: &S,
+    signer: &AutoSigner,
 ) -> Result<()> {
     let market = state
         .markets
@@ -112,13 +62,13 @@ fn sdk_side(side: Side) -> SdkSide {
 }
 
 /// Place a post-only maker order via the SDK.
-async fn place_maker_order<S: Signer + Send + Sync>(
+async fn place_maker_order(
     state: &Arc<AppState>,
     signal: &Signal,
     token_id: &pp_core::TokenId,
     token_u256: U256,
     client: &AuthClient,
-    signer: &S,
+    signer: &AutoSigner,
 ) -> Result<()> {
     let ob = state
         .orderbooks
@@ -154,8 +104,7 @@ async fn place_maker_order<S: Signer + Send + Sync>(
         .await
         .context("SDK limit_order build failed")?;
 
-    let signed = client.sign(signer, order).await
-        .context("Order signing failed")?;
+    let signed = signer.sign_order(client, order).await?;
 
     let response = client.post_order(signed).await
         .context("post_order request failed")?;
@@ -194,13 +143,13 @@ async fn place_maker_order<S: Signer + Send + Sync>(
 }
 
 /// Place a FOK market order via the SDK (aggressive taker).
-async fn place_market_order<S: Signer + Send + Sync>(
+async fn place_market_order(
     state: &Arc<AppState>,
     signal: &Signal,
     token_id: &pp_core::TokenId,
     token_u256: U256,
     client: &AuthClient,
-    signer: &S,
+    signer: &AutoSigner,
 ) -> Result<()> {
     let ob = state
         .orderbooks
@@ -238,7 +187,9 @@ async fn place_market_order<S: Signer + Send + Sync>(
         .await
         .context("SDK market_order build failed")?;
 
-    let signed = client.sign(signer, order).await
+    let signed = signer
+        .sign_order(client, order)
+        .await
         .context("Market order signing failed")?;
 
     let response = client.post_order(signed).await

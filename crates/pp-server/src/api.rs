@@ -27,6 +27,14 @@ fn bad_request(msg: impl Into<String>) -> (StatusCode, Json<ApiError>) {
     )
 }
 
+/// Shorthand for returning a 500 Internal Server Error with a JSON error message.
+fn internal_error(msg: impl Into<String>) -> (StatusCode, Json<ApiError>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ApiError { error: msg.into() }),
+    )
+}
+
 pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
         .route("/status", get(status))
@@ -614,9 +622,9 @@ async fn update_config(
             }
         }
         cfg.asset_definitions = def_list.iter().map(|d| pp_core::AssetMeta {
-            symbol: d.symbol.to_uppercase(),
-            binance_symbol: d.binance_symbol.clone(),
-            keywords: d.keywords.iter().map(|k| k.to_lowercase()).collect(),
+            symbol: d.symbol.trim().to_uppercase(),
+            binance_symbol: d.binance_symbol.trim().to_uppercase(),
+            keywords: d.keywords.iter().map(|k| k.trim().to_lowercase()).collect(),
         }).collect();
         changes.push(format!("asset_definitions: {} assets", def_list.len()));
 
@@ -652,7 +660,8 @@ async fn update_config(
     // Persist config to DB so it survives restart
     if let Some(ref db) = state.db {
         if let Err(e) = db.save_config(&cfg) {
-            tracing::warn!(error = %e, "Failed to persist config to DB");
+            tracing::error!(error = %e, "Failed to persist config to DB");
+            return internal_error(format!("failed to persist config: {e}")).into_response();
         }
     }
 
@@ -668,4 +677,187 @@ async fn update_config(
         "changes": changes,
         "config": *cfg
     })).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::Json;
+    use axum::extract::State;
+    use axum::response::IntoResponse;
+    use pp_core::{AppState, Asset, BotDb};
+    use serde_json::Value;
+    use std::sync::Arc;
+
+    fn temp_db() -> BotDb {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "polyprofit_server_test_{}_{}_{}",
+            std::process::id(),
+            id,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path = dir.join("test.db");
+        std::fs::create_dir_all(&dir).unwrap();
+        BotDb::open(&path).unwrap()
+    }
+
+    fn state_with_db() -> Arc<AppState> {
+        AppState::new_with_db(temp_db())
+    }
+
+    async fn response_json(response: axum::response::Response) -> Value {
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let mut json: Value = serde_json::from_slice(&body).unwrap();
+        if let Value::Object(ref mut map) = json {
+            map.insert("_status".into(), Value::from(status.as_u16()));
+        }
+        json
+    }
+
+    #[tokio::test]
+    async fn update_config_returns_validation_error_for_invalid_prob_range() {
+        let state = state_with_db();
+
+        let response = update_config(
+            State(state),
+            Json(ConfigUpdate {
+                min_prob: Some("0.90".into()),
+                max_prob: Some("0.10".into()),
+                min_edge: None,
+                max_spread: None,
+                order_strategy: None,
+                market_refresh_secs: None,
+                daily_loss_limit: None,
+                daily_profit_cap: None,
+                max_position_pct: None,
+                max_concurrent: None,
+                drawdown_limit: None,
+                adverse_fill_pause: None,
+                assets: None,
+                asset_definitions: None,
+            }),
+        )
+        .await
+        .into_response();
+
+        let json = response_json(response).await;
+        assert_eq!(json["_status"], 400);
+        assert!(json["error"]
+            .as_str()
+            .unwrap()
+            .contains("min_prob"));
+    }
+
+    #[tokio::test]
+    async fn update_config_normalizes_definitions_and_removes_orphaned_assets() {
+        let state = state_with_db();
+        {
+            let mut cfg = state.runtime_config.write();
+            cfg.assets = vec![Asset::new("BTC"), Asset::new("ETH")];
+            cfg.asset_definitions = vec![
+                pp_core::AssetMeta {
+                    symbol: "BTC".into(),
+                    binance_symbol: "BTCUSDT".into(),
+                    keywords: vec!["btc".into()],
+                },
+                pp_core::AssetMeta {
+                    symbol: "ETH".into(),
+                    binance_symbol: "ETHUSDT".into(),
+                    keywords: vec!["eth".into()],
+                },
+            ];
+        }
+        state.rebuild_asset_registry();
+
+        let response = update_config(
+            State(state.clone()),
+            Json(ConfigUpdate {
+                min_edge: None,
+                min_prob: None,
+                max_prob: None,
+                max_spread: None,
+                order_strategy: None,
+                market_refresh_secs: None,
+                daily_loss_limit: None,
+                daily_profit_cap: None,
+                max_position_pct: None,
+                max_concurrent: None,
+                drawdown_limit: None,
+                adverse_fill_pause: None,
+                assets: None,
+                asset_definitions: Some(vec![AssetDefUpdate {
+                    symbol: " btc ".into(),
+                    binance_symbol: "btcusdt".into(),
+                    keywords: vec![" Bitcoin ".into(), "btc".into()],
+                }]),
+            }),
+        )
+        .await
+        .into_response();
+
+        let json = response_json(response).await;
+        assert_eq!(json["_status"], 200);
+        assert_eq!(json["config"]["asset_definitions"][0]["symbol"], "BTC");
+        assert_eq!(json["config"]["assets"], serde_json::json!(["BTC"]));
+        assert!(json["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item.as_str().unwrap().contains("auto-removed orphaned active assets")));
+    }
+
+    #[tokio::test]
+    async fn update_config_persists_and_rebuilds_registry() {
+        let state = state_with_db();
+
+        let response = update_config(
+            State(state.clone()),
+            Json(ConfigUpdate {
+                min_edge: Some("0.07".into()),
+                min_prob: None,
+                max_prob: None,
+                max_spread: None,
+                order_strategy: None,
+                market_refresh_secs: None,
+                daily_loss_limit: None,
+                daily_profit_cap: None,
+                max_position_pct: None,
+                max_concurrent: None,
+                drawdown_limit: None,
+                adverse_fill_pause: None,
+                assets: Some(vec!["BTC".into()]),
+                asset_definitions: Some(vec![AssetDefUpdate {
+                    symbol: "BTC".into(),
+                    binance_symbol: "BTCUSDT".into(),
+                    keywords: vec!["btc".into()],
+                }]),
+            }),
+        )
+        .await
+        .into_response();
+
+        let json = response_json(response).await;
+        assert_eq!(json["_status"], 200);
+        assert!(state.asset_registry.contains_key(&Asset::new("BTC")));
+
+        let saved = state
+            .db
+            .as_ref()
+            .unwrap()
+            .load_config()
+            .unwrap()
+            .unwrap();
+        assert_eq!(saved.min_edge.to_string(), "0.07");
+        assert_eq!(saved.assets, vec![Asset::new("BTC")]);
+        assert_eq!(saved.asset_definitions.len(), 1);
+    }
 }

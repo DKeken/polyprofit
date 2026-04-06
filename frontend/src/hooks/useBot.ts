@@ -5,7 +5,7 @@
  * API calls go through the typed client in api.ts.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api";
 
 // ── Re-export Rust-generated types for component use ──
@@ -22,8 +22,16 @@ export interface PnlPoint {
   pnl: number;
 }
 
+export interface LogEntry {
+  id: number;
+  ts: string;
+  type: 'EVAL' | 'EXEC' | 'FILL' | 'ERR' | 'SYS';
+  msg: string;
+}
+
 const INITIAL: Tick = {
   daily_pnl: "0.00",
+  total_pnl: "0.00",
   paused: false,
   heartbeat_alive: false,
   positions: 0,
@@ -39,7 +47,6 @@ const INITIAL: Tick = {
   total_trades: 0,
   orders_placed: 0,
   orders_cancelled: 0,
-  mode: "Demo",
   prices: {},
   config: {
     min_edge: "0.05",
@@ -63,12 +70,14 @@ const INITIAL: Tick = {
   open_positions: [],
 };
 
-const MAX_PNL_POINTS = 120; // ~2 min of 1s ticks
+const MAX_PNL_POINTS = 3600; // ~1 hour of 1s ticks — long history for equity curve
 
 export function useBot() {
   const [tick, setTick] = useState<Tick>(INITIAL);
   const [connected, setConnected] = useState(false);
   const [pnlHistory, setPnlHistory] = useState<PnlPoint[]>([]);
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const logIdRef = useRef(0);
 
   // Load persisted PnL history on mount (so equity curve survives page refresh)
   useEffect(() => {
@@ -94,6 +103,22 @@ export function useBot() {
     let stopped = false;
     let delay = 1000;
 
+    function tradeToLogEntry(trade: Tick["trades"][number]): LogEntry | null {
+      const pnl = trade.pnl ? parseFloat(trade.pnl) : null;
+      const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      if (trade.adverse) {
+        return { id: logIdRef.current++, ts, type: 'ERR', msg: `Adverse fill: ${trade.market?.slice(0, 40)}` };
+      }
+      if (pnl !== null && pnl !== 0) {
+        const sign = pnl > 0 ? '+' : '';
+        return { id: logIdRef.current++, ts, type: 'FILL', msg: `${sign}$${pnl.toFixed(2)} // ${trade.side} ${trade.market?.slice(0, 30)}` };
+      }
+      if (trade.market) {
+        return { id: logIdRef.current++, ts, type: 'EXEC', msg: `$${trade.size ?? '?'} — ${trade.market?.slice(0, 35)} // ${trade.side}` };
+      }
+      return null;
+    }
+
     function connect() {
       if (stopped) return;
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -115,13 +140,26 @@ export function useBot() {
                 minute: "2-digit",
                 second: "2-digit",
               }),
-              pnl: parseFloat(data.daily_pnl) || 0,
+              pnl: parseFloat(data.total_pnl) || 0,
             };
             const next = [...prev, point];
             return next.length > MAX_PNL_POINTS
               ? next.slice(-MAX_PNL_POINTS)
               : next;
           });
+
+          // Generate execution log entries from new trades
+          if (data.trades?.length) {
+            const newLogs = data.trades.slice(0, 5)
+              .map((t) => tradeToLogEntry(t))
+              .filter((e): e is LogEntry => e !== null);
+            if (newLogs.length) {
+              setLogEntries(prev => {
+                const next = [...prev, ...newLogs];
+                return next.length > 200 ? next.slice(-200) : next;
+              });
+            }
+          }
         } catch {
           /* ignore */
         }
@@ -153,10 +191,11 @@ export function useBot() {
     await api.kill();
   }, []);
 
-  const updateConfig = useCallback(
-    (updates: Record<string, unknown>) => api.updateConfig(updates),
-    [],
-  );
+  const updateConfig = useCallback(async (updates: Record<string, unknown>) => {
+    const res = await api.updateConfig(updates);
+    setTick((prev) => ({ ...prev, config: res.config }));
+    return res;
+  }, []);
 
-  return { tick, connected, pnlHistory, pause, resume, kill, updateConfig };
+  return { tick, connected, pnlHistory, logEntries, pause, resume, kill, updateConfig };
 }

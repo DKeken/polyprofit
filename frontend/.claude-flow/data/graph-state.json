@@ -1,166 +1,166 @@
 {
   "version": 1,
-  "updatedAt": 1774982547637,
+  "updatedAt": 1775081661741,
   "nodeCount": 23,
   "nodes": {
     "mem-MEMORY-memory-index": {
       "id": "mem-MEMORY-memory-index",
       "category": "core",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444357
     },
     "mem-desktop_ui_patterns-layout-architecture--as-of-202": {
       "id": "mem-desktop_ui_patterns-layout-architecture--as-of-202",
       "category": "desktop_ui_patterns",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444358
     },
     "mem-desktop_ui_patterns-navigation-structure": {
       "id": "mem-desktop_ui_patterns-navigation-structure",
       "category": "desktop_ui_patterns",
-      "confidence": 0.5,
-      "accessCount": 0,
+      "confidence": 0.6350000000000001,
+      "accessCount": 3,
       "createdAt": 1774959444358
     },
     "mem-desktop_ui_patterns-settings": {
       "id": "mem-desktop_ui_patterns-settings",
       "category": "desktop_ui_patterns",
-      "confidence": 0.5,
-      "accessCount": 0,
+      "confidence": 0.6350000000000001,
+      "accessCount": 3,
       "createdAt": 1774959444358
     },
     "mem-desktop_ui_patterns-empty-states": {
       "id": "mem-desktop_ui_patterns-empty-states",
       "category": "desktop_ui_patterns",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444358
     },
     "mem-desktop_ui_patterns-chat-sidebar": {
       "id": "mem-desktop_ui_patterns-chat-sidebar",
       "category": "desktop_ui_patterns",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444358
     },
     "mem-feedback_use_bun----": {
       "id": "mem-feedback_use_bun----",
       "category": "feedback_use_bun",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444358
     },
     "mem-gitlab_mcp_server-gitlab-mcp-server": {
       "id": "mem-gitlab_mcp_server-gitlab-mcp-server",
       "category": "gitlab_mcp_server",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444358
     },
     "mem-project_mcp_servers----": {
       "id": "mem-project_mcp_servers----",
       "category": "project_mcp_servers",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444359
     },
     "mem-project_mcp_servers---fixed-configuration-issue": {
       "id": "mem-project_mcp_servers---fixed-configuration-issue",
       "category": "project_mcp_servers",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444359
     },
     "mem-project_mcp_servers-current-mcp-setup--8-servers-t": {
       "id": "mem-project_mcp_servers-current-mcp-setup--8-servers-t",
       "category": "project_mcp_servers",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444359
     },
     "mem-project_mcp_servers-next-steps": {
       "id": "mem-project_mcp_servers-next-steps",
       "category": "project_mcp_servers",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444359
     },
     "mem-project_mcp_servers-enabled-plugins": {
       "id": "mem-project_mcp_servers-enabled-plugins",
       "category": "project_mcp_servers",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444359
     },
     "mem-project_mcp_servers-why-this-setup": {
       "id": "mem-project_mcp_servers-why-this-setup",
       "category": "project_mcp_servers",
-      "confidence": 0.5,
-      "accessCount": 0,
+      "confidence": 0.6850000000000002,
+      "accessCount": 4,
       "createdAt": 1774959444359
     },
     "mem-trello_env_location-trello-credentials-location": {
       "id": "mem-trello_env_location-trello-credentials-location",
       "category": "trello_env_location",
-      "confidence": 0.5,
-      "accessCount": 0,
+      "confidence": 0.6850000000000002,
+      "accessCount": 4,
       "createdAt": 1774959444359
     },
     "mem-MEMORY-project": {
       "id": "mem-MEMORY-project",
       "category": "core",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444360
     },
     "mem-MEMORY-key-paths": {
       "id": "mem-MEMORY-key-paths",
       "category": "core",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444360
     },
     "mem-MEMORY-skill-files": {
       "id": "mem-MEMORY-skill-files",
       "category": "core",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444360
     },
     "mem-MEMORY-critical-anti-patterns--verifi": {
       "id": "mem-MEMORY-critical-anti-patterns--verifi",
       "category": "core",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774959444360
     },
     "mem-MEMORY-shared-utilities---frontend": {
       "id": "mem-MEMORY-shared-utilities---frontend",
       "category": "core",
-      "confidence": 0.5,
-      "accessCount": 0,
+      "confidence": 0.5650000000000001,
+      "accessCount": 2,
       "createdAt": 1774959444360
     },
     "mem-MEMORY-decision-log": {
       "id": "mem-MEMORY-decision-log",
       "category": "core",
-      "confidence": 0.5,
-      "accessCount": 0,
+      "confidence": 0.5650000000000001,
+      "accessCount": 2,
       "createdAt": 1774959444360
     },
     "mem-MEMORY-naming-conventions": {
       "id": "mem-MEMORY-naming-conventions",
       "category": "core",
-      "confidence": 0.5,
-      "accessCount": 0,
+      "confidence": 0.6850000000000002,
+      "accessCount": 4,
       "createdAt": 1774959444360
     },
     "insight-1774969623537-dw2a": {
       "id": "insight-1774969623537-dw2a",
       "category": "insights",
-      "confidence": 0.5,
+      "confidence": 0.485,
       "accessCount": 0,
       "createdAt": 1774969623537
     }

@@ -48,7 +48,6 @@ async fn get_status(AxumState((state, _)): AxumState<AppCtx>) -> Json<serde_json
         "trades": s.trades,
         "positions": s.positions.len(),
         "cycle": s.cycle,
-        "mode": s.mode,
         "heartbeat": pp_execution::heartbeat::is_healthy(),
         "prices": {
             "binance": &s.prices.binance,
@@ -81,7 +80,7 @@ async fn resume(AxumState((state, _)): AxumState<AppCtx>) -> &'static str {
 
 ---
 
-## ws.rs — Live stream каждую секунду
+## ws.rs — Tick stream каждую секунду
 
 ```rust
 use axum::extract::ws::{WebSocket, WebSocketUpgrade, Message};

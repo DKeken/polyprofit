@@ -117,14 +117,13 @@ impl RiskManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pp_core::{AppState, ConditionId, Mode, Position, Side, TokenId};
+    use pp_core::{AppState, ConditionId, Position, Side, TokenId};
     use rust_decimal_macros::dec;
     use std::sync::atomic::Ordering;
 
     /// Build a minimal Config for RiskManager::new.
     fn dummy_config() -> pp_core::Config {
         pp_core::Config {
-            mode: Mode::Demo,
             chain_id: 137,
             strategy: pp_core::config::StrategyConfig {
                 min_edge: dec!(0.05),
@@ -160,7 +159,7 @@ mod tests {
 
     /// Helper: create a ready-to-trade AppState (heartbeat alive, not paused)
     fn trading_state() -> Arc<AppState> {
-        let state = AppState::new(Mode::Demo);
+        let state = AppState::new();
         state.paused.store(false, Ordering::Relaxed);
         state.heartbeat_alive.store(true, Ordering::Relaxed);
         state.set_starting_balance(dec!(1000.00));
@@ -173,7 +172,7 @@ mod tests {
     fn can_trade_paused_returns_error() {
         let cfg = dummy_config();
         let rm = RiskManager::new(&cfg);
-        let state = AppState::new(Mode::Demo);
+        let state = AppState::new();
         state.paused.store(true, Ordering::Relaxed);
         state.heartbeat_alive.store(true, Ordering::Relaxed);
 
@@ -187,7 +186,7 @@ mod tests {
     fn can_trade_heartbeat_dead_returns_error() {
         let cfg = dummy_config();
         let rm = RiskManager::new(&cfg);
-        let state = AppState::new(Mode::Demo);
+        let state = AppState::new();
         state.paused.store(false, Ordering::Relaxed);
         state.heartbeat_alive.store(false, Ordering::Relaxed);
 
