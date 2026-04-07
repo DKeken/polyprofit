@@ -1,39 +1,15 @@
-import { useState } from "react";
 import { useBot } from "../hooks/useBot";
 import EquityCurve from "./EquityCurve";
 import ExecutionLog from "./ExecutionLog";
 import TradeFeed from "./TradeFeed";
-import Settings from "./Settings";
 
 /* ── Main Dashboard ── */
 
 export default function Dashboard() {
-  const { tick, connected, pnlHistory, logEntries, updateConfig } = useBot();
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
-  // Settings overlay — accessible via long-press on title or keyboard shortcut
-  if (settingsOpen) {
-    return (
-      <div className="min-h-screen text-zinc-100">
-        <div className="max-w-[1200px] mx-auto p-4 md:p-6">
-          <button
-            onClick={() => setSettingsOpen(false)}
-            className="mb-4 px-3 py-1.5 text-xs font-mono text-zinc-400 hover:text-zinc-200 bg-zinc-800 border border-zinc-700 rounded-lg transition-colors"
-          >
-            &larr; Back to Dashboard
-          </button>
-          <Settings
-            key={JSON.stringify(tick.config)}
-            config={tick.config}
-            onSave={updateConfig}
-          />
-        </div>
-      </div>
-    );
-  }
+  const { tick, connected, pnlHistory, logEntries } = useBot();
 
   return (
-    <div className="h-screen text-zinc-100 flex flex-col overflow-hidden">
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* ── Two-column layout ── */}
       <div className="flex-1 flex min-h-0">
         {/* ── Left: Trade Feed ── */}

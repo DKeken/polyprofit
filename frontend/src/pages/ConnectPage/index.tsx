@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Button, Panel, Input } from "../../shared/ui";
 import { api } from "../../api";
 
 export default function ConnectPage() {
+  const [, setLocation] = useLocation();
   const [privKey, setPrivKey] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
@@ -27,8 +29,8 @@ export default function ConnectPage() {
         api_secret: apiSecret,
         api_passphrase: passphrase,
       });
-      // The backend will write .env and shut down.
-      // The frontend polling will briefly fail, then reconnect when the bot restarts.
+      // Give the backend a second to restart, then navigate to dashboard
+      setTimeout(() => setLocation("/"), 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to connect");
       setLoading(false);
@@ -63,7 +65,6 @@ export default function ConnectPage() {
                   value={privKey}
                   onChange={(e) => setPrivKey(e.target.value)}
                   placeholder="0x..."
-                  
                 />
                 <p className="text-[10px] text-zinc-600 font-mono mt-1.5">
                   Used for EIP-712 order signing. Never sent to Polymarket
@@ -85,7 +86,6 @@ export default function ConnectPage() {
                       type="text"
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
-                      
                     />
                   </div>
                   <div>
@@ -96,7 +96,6 @@ export default function ConnectPage() {
                       type="password"
                       value={apiSecret}
                       onChange={(e) => setApiSecret(e.target.value)}
-                      
                     />
                   </div>
                   <div>
@@ -107,7 +106,6 @@ export default function ConnectPage() {
                       type="password"
                       value={passphrase}
                       onChange={(e) => setPassphrase(e.target.value)}
-                      
                     />
                   </div>
                 </div>

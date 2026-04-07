@@ -1,20 +1,19 @@
 import { Suspense, lazy, useState, useEffect } from "react";
+import { Link, Route, Switch, useLocation } from "wouter";
 import { useBot } from "./hooks/useBot";
-import Settings from "./components/Settings";
 
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const WhalesPage = lazy(() => import("./pages/WhalesPage"));
 const ConnectPage = lazy(() => import("./pages/ConnectPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const Analytics = lazy(() => import("./components/Analytics"));
 const Markets = lazy(() => import("./components/Markets"));
 
-type Tab = "dashboard" | "whales" | "markets" | "analytics" | "connect";
-
-const NAV_TABS: { id: Tab; label: string }[] = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "whales", label: "Whales" },
-  { id: "markets", label: "Markets" },
-  { id: "analytics", label: "Analytics" },
+const NAV_TABS: { path: string; label: string }[] = [
+  { path: "/", label: "Dashboard" },
+  { path: "/whales", label: "Whales" },
+  { path: "/markets", label: "Markets" },
+  { path: "/analytics", label: "Analytics" },
 ];
 
 function formatUptime(secs: number | undefined): string {
@@ -34,12 +33,11 @@ function Loader() {
 }
 
 function App() {
-  const [tab, setTab] = useState<Tab>("dashboard");
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [location] = useLocation();
   const [connected, setConnected] = useState<boolean | null>(null);
 
   const bot = useBot();
-  const { tick, pause, resume, kill, updateConfig } = bot;
+  const { tick, pause, resume, kill } = bot;
 
   // Check if backend is reachable
   useEffect(() => {
@@ -63,27 +61,6 @@ function App() {
   // Still checking connection
   if (connected === null) return <Loader />;
 
-  // Settings overlay
-  if (settingsOpen) {
-    return (
-      <div className="min-h-screen text-zinc-100">
-        <div className="max-w-[1200px] mx-auto p-4 md:p-6">
-          <button
-            onClick={() => setSettingsOpen(false)}
-            className="mb-4 px-3 py-1.5 text-xs font-mono text-zinc-400 hover:text-zinc-200 bg-zinc-800 border border-zinc-700 rounded-lg transition-colors"
-          >
-            &larr; Back to App
-          </button>
-          <Settings
-            key={JSON.stringify(tick.config)}
-            config={tick.config}
-            onSave={updateConfig}
-          />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="h-screen text-zinc-100 flex flex-col overflow-hidden">
       {/* ── Top nav bar ── */}
@@ -96,17 +73,17 @@ function App() {
         {/* Tabs */}
         <div className="flex bg-zinc-800/50 rounded p-0.5 border border-zinc-700/50 mr-4">
           {NAV_TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
+            <Link
+              key={t.path}
+              href={t.path}
               className={`px-3 py-1 text-[10px] font-mono uppercase tracking-wider rounded transition-colors ${
-                tab === t.id
-                  ? "text-zinc-100 shadow-sm"
+                location === t.path
+                  ? "bg-zinc-700 text-zinc-100 shadow-sm"
                   : "text-zinc-500 hover:text-zinc-300"
               }`}
             >
               {t.label}
-            </button>
+            </Link>
           ))}
         </div>
 
@@ -163,23 +140,27 @@ function App() {
           <div className="w-px h-4 bg-zinc-800" />
 
           {/* Connect Tab Button */}
-          <button
-            onClick={() => setTab("connect")}
+          <Link
+            href="/connect"
             className={`px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider rounded border transition-colors ${
-              tab === "connect"
+              location === "/connect"
                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
                 : "text-zinc-500 border-zinc-700 hover:text-zinc-300 hover:border-zinc-700"
             }`}
           >
             Wallet
-          </button>
+          </Link>
 
           <div className="w-px h-4 bg-zinc-800" />
 
           {/* Settings */}
-          <button
-            onClick={() => setSettingsOpen(true)}
-            className="text-zinc-500 hover:text-zinc-300 transition-colors p-1"
+          <Link
+            href="/settings"
+            className={`transition-colors p-1 ${
+              location === "/settings"
+                ? "text-zinc-100"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
             title="Settings"
           >
             <svg
@@ -195,18 +176,23 @@ function App() {
               <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
               <circle cx="12" cy="12" r="3" />
             </svg>
-          </button>
+          </Link>
         </div>
       </nav>
 
       {/* ── Page content ── */}
-      <Suspense fallback={<Loader />}>
-        {tab === "dashboard" && <DashboardPage />}
-        {tab === "whales" && <WhalesPage />}
-        {tab === "markets" && <Markets />}
-        {tab === "analytics" && <Analytics />}
-        {tab === "connect" && <ConnectPage />}
-      </Suspense>
+      <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
+        <Suspense fallback={<Loader />}>
+          <Switch>
+            <Route path="/" component={DashboardPage} />
+            <Route path="/whales" component={WhalesPage} />
+            <Route path="/markets" component={Markets} />
+            <Route path="/analytics" component={Analytics} />
+            <Route path="/connect" component={ConnectPage} />
+            <Route path="/settings" component={SettingsPage} />
+          </Switch>
+        </Suspense>
+      </div>
     </div>
   );
 }

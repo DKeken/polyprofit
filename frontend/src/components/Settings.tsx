@@ -338,7 +338,7 @@ export default function Settings({ config, onSave }: Props) {
   const riskFields = filteredFields.filter((f) => f.group === "risk");
 
   return (
-    <div className="flex flex-col h-full space-y-4 animate-slide-up pb-24 p-4">
+    <div className="flex flex-col h-full space-y-4 animate-slide-up pb-24">
       {/* Header: Tabs & Search */}
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
         <div className="flex space-x-1 p-1 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
