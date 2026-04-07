@@ -3025,13 +3025,16 @@ dependencies = [
 name = "pp-server"
 version = "0.1.0"
 dependencies = [
+ "alloy",
  "anyhow",
  "axum",
  "chrono",
  "futures",
  "pp-core",
  "pp-discovery",
+ "pp-wallet",
  "pp-whales",
+ "reqwest",
  "rust_decimal",
  "rust_decimal_macros",
  "serde",

@@ -33,6 +33,8 @@ const CONFIG: TableDefinition<&str, &str> = TableDefinition::new("config");
 /// Whales: string address → JSON-encoded WhaleProfile
 const WHALES: TableDefinition<&str, &str> = TableDefinition::new("whales");
 
+/// Equity Curve: u64 timestamp → i64 total_pnl cents
+const EQUITY_CURVE: TableDefinition<u64, i64> = TableDefinition::new("equity_curve");
 
 /// Wrapper around redb::Database for bot persistence.
 pub struct BotDb {
@@ -59,6 +61,7 @@ impl BotDb {
             let _ = txn.open_table(STATE)?;
             let _ = txn.open_table(CONFIG)?;
             let _ = txn.open_table(WHALES)?;
+            let _ = txn.open_table(EQUITY_CURVE)?;
         }
         txn.commit()?;
 
@@ -277,6 +280,93 @@ impl BotDb {
         txn.commit()?;
         Ok(())
     }
+
+    // ── Equity Curve ──
+
+    /// Save a data point for the equity curve
+    pub fn save_equity_point(&self, time: u64, pnl_cents: i64) -> Result<()> {
+        let txn = self.db.begin_write()?;
+        {
+            let mut table = txn.open_table(EQUITY_CURVE)?;
+            table.insert(time, pnl_cents)?;
+        }
+        txn.commit()?;
+        Ok(())
+    }
+
+    /// Load equity curve points since a timestamp, downsampling dynamically to `max_points`.
+    pub fn load_equity_history_since(&self, since_ts: u64, max_points: usize) -> Result<Vec<(u64, i64)>> {
+        let txn = self.db.begin_read()?;
+        let table = txn.open_table(EQUITY_CURVE)?;
+        let mut all_points = Vec::new();
+        // Read from newest to oldest
+        for entry in table.iter()?.rev() {
+            let (k, v) = entry?;
+            let ts = k.value();
+            if ts < since_ts {
+                break;
+            }
+            all_points.push((ts, v.value()));
+        }
+        // Reverse so that oldest is first
+        all_points.reverse();
+
+        if all_points.len() <= max_points {
+            return Ok(all_points);
+        }
+
+        // Downsample
+        let step = all_points.len() as f64 / max_points as f64;
+        let mut sampled = Vec::with_capacity(max_points);
+        for i in 0..max_points {
+            let idx = (i as f64 * step) as usize;
+            if let Some(&p) = all_points.get(idx) {
+                sampled.push(p);
+            }
+        }
+        
+        // Ensure the absolute latest point is always included if absent
+        if let Some(&last) = all_points.last() {
+            if sampled.last().map(|(t, _)| *t) != Some(last.0) {
+                sampled.push(last);
+            }
+        }
+        
+        Ok(sampled)
+    }
+
+    /// Backfill equity curve from historical trades if it is empty
+    pub fn backfill_equity_if_empty(&self, trades: &[crate::models::trade::TradeLog]) -> Result<()> {
+        let mut should_backfill = false;
+        {
+            let txn = self.db.begin_read()?;
+            let table = txn.open_table(EQUITY_CURVE)?;
+            if table.is_empty()? {
+                should_backfill = true;
+            }
+        }
+        
+        if should_backfill && !trades.is_empty() {
+            let txn = self.db.begin_write()?;
+            {
+                let mut table = txn.open_table(EQUITY_CURVE)?;
+                let mut cumulative = rust_decimal::Decimal::ZERO;
+                use rust_decimal::prelude::ToPrimitive;
+                
+                for t in trades {
+                    if let Some(pnl) = t.pnl {
+                        cumulative += pnl;
+                        if let Some(cents) = (cumulative * rust_decimal::Decimal::new(100, 0)).to_i64() {
+                            table.insert(t.timestamp.timestamp() as u64, cents)?;
+                        }
+                    }
+                }
+            }
+            txn.commit()?;
+        }
+        
+        Ok(())
+    }
 }
 
 /// Periodic checkpoint task — saves state every N seconds.
@@ -330,6 +420,20 @@ pub async fn checkpoint_loop(state: Arc<crate::AppState>, interval_secs: u64) ->
 
                     if let Err(e) = db.checkpoint_balance(pnl, peak) {
                         warn!("Balance checkpoint failed: {e}");
+                    }
+                    
+                    // ── Equity point ──
+                    use rust_decimal::prelude::ToPrimitive;
+                    let total_pnl = state.trades.read()
+                        .iter()
+                        .filter_map(|t| t.pnl)
+                        .fold(rust_decimal::Decimal::ZERO, |acc, p| acc + p);
+                    
+                    if let Some(cents) = (total_pnl * rust_decimal::Decimal::new(100, 0)).to_i64() {
+                        let now_ts = chrono::Utc::now().timestamp() as u64;
+                        if let Err(e) = db.save_equity_point(now_ts, cents) {
+                            warn!("Failed to save equity point: {e}");
+                        }
                     }
                 }
             }

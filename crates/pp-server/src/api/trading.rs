@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use axum::extract::State;
+use axum::extract::{State, Query};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::Json;
 use rust_decimal::Decimal;
+use serde::Deserialize;
 
 use pp_core::{AppState, Asset};
 
@@ -13,6 +14,22 @@ use crate::api::dto::{
     MarketsResponse, MarketDto, DbStatsResponse,
     PnlHistoryResponse, PnlPointDto, Analytics, AssetStats,
 };
+
+#[derive(Deserialize)]
+pub struct PeriodQuery {
+    pub period: Option<String>,
+}
+
+fn parse_period_to_since_ts(period: Option<&str>) -> u64 {
+    let now = chrono::Utc::now().timestamp() as u64;
+    match period.unwrap_or("ALL") {
+        "1H" => now.saturating_sub(60 * 60),
+        "24H" => now.saturating_sub(24 * 60 * 60),
+        "7D" => now.saturating_sub(7 * 24 * 60 * 60),
+        "30D" => now.saturating_sub(30 * 24 * 60 * 60),
+        _ => 0,
+    }
+}
 
 pub async fn positions(State(state): State<Arc<AppState>>) -> Json<PositionsResponse> {
     let positions: Vec<PositionDto> = state
@@ -115,16 +132,46 @@ pub async fn db_stats(State(state): State<Arc<AppState>>) -> Json<DbStatsRespons
     }
 }
 
-pub async fn pnl_history(State(state): State<Arc<AppState>>) -> Json<PnlHistoryResponse> {
+pub async fn pnl_history(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<PeriodQuery>,
+) -> Json<PnlHistoryResponse> {
+    let since_ts = parse_period_to_since_ts(query.period.as_deref());
+
+    if let Some(ref db) = state.db {
+        if let Ok(history) = db.load_equity_history_since(since_ts, 500) {
+            if !history.is_empty() {
+                let points: Vec<PnlPointDto> = history
+                    .into_iter()
+                    .map(|(ts, cents)| {
+                        use chrono::TimeZone;
+                        let dt = chrono::Utc.timestamp_opt(ts as i64, 0).unwrap();
+                        let pnl = rust_decimal::Decimal::new(cents, 2);
+                        PnlPointDto {
+                            time: dt.to_rfc3339(),
+                            pnl: pnl.to_string(),
+                        }
+                    })
+                    .collect();
+
+                return Json(PnlHistoryResponse { points });
+            }
+        }
+    }
+
+    // Fallback if no history yet
     let trades = state.trades.read();
     let mut cumulative = rust_decimal::Decimal::ZERO;
     let points: Vec<PnlPointDto> = trades
         .iter()
         .filter_map(|t| {
+            if (t.timestamp.timestamp() as u64) < since_ts {
+                return None;
+            }
             let pnl = t.pnl?;
             cumulative += pnl;
             Some(PnlPointDto {
-                time: t.timestamp.format("%H:%M:%S").to_string(),
+                time: t.timestamp.to_rfc3339(),
                 pnl: cumulative.to_string(),
             })
         })
@@ -133,7 +180,11 @@ pub async fn pnl_history(State(state): State<Arc<AppState>>) -> Json<PnlHistoryR
     Json(PnlHistoryResponse { points })
 }
 
-pub async fn analytics(State(state): State<Arc<AppState>>) -> Json<Analytics> {
+pub async fn analytics(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<PeriodQuery>,
+) -> Json<Analytics> {
+    let since_ts = parse_period_to_since_ts(query.period.as_deref());
     let trades = state.trades.read();
 
     let mut winning_trades: usize = 0;
@@ -146,7 +197,15 @@ pub async fn analytics(State(state): State<Arc<AppState>>) -> Json<Analytics> {
     let mut sum_losses = Decimal::ZERO;
     let mut by_asset: HashMap<String, (usize, usize, usize, Decimal)> = HashMap::new();
 
+    let mut filtered_trades_count = 0;
+
     for trade in trades.iter() {
+        if (trade.timestamp.timestamp() as u64) < since_ts {
+            continue;
+        }
+
+        filtered_trades_count += 1;
+
         let asset = state
             .markets
             .get(&trade.condition_id)
@@ -180,7 +239,6 @@ pub async fn analytics(State(state): State<Arc<AppState>>) -> Json<Analytics> {
         }
     }
 
-    let total_trades = trades.len();
     let resolved = winning_trades + losing_trades;
 
     let win_rate = if resolved > 0 {
@@ -236,7 +294,7 @@ pub async fn analytics(State(state): State<Arc<AppState>>) -> Json<Analytics> {
         .collect();
 
     Json(Analytics {
-        total_trades,
+        total_trades: filtered_trades_count,
         winning_trades,
         losing_trades,
         pending_trades,

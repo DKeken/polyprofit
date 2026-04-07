@@ -8,28 +8,25 @@ import type { Tick } from "@server-bindings/Tick";
 import type { TradeInfo } from "@server-bindings/TradeInfo";
 import type { PositionInfo } from "@server-bindings/PositionInfo";
 import Markets from "./Markets";
+import { Panel } from "../shared/ui";
+
+import { formatDuration, isBuySide } from "../shared/lib/format";
 
 function timeAgo(ts: string | undefined): string {
   if (!ts) return "";
   const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
   if (diff < 0 || isNaN(diff)) return "now";
   if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
+  return formatDuration(diff) + " ago";
 }
 
 function formatAge(secs: number): string {
-  if (secs < 60) return `${secs}s`;
-  const m = Math.floor(secs / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  return `${h}h ${m % 60}m`;
+  return formatDuration(secs);
 }
 
-function TradeRow({ trade }: { trade: TradeInfo }) {
+function TradeRow({ trade, t }: { trade: TradeInfo, t: (k: string) => string }) {
   const pnl = trade.pnl ? parseFloat(trade.pnl) : null;
-  const isYes = trade.side === "YES" || trade.side === "Yes" || trade.side === "Buy";
+  const isYes = isBuySide(trade.side);
   const sign = pnl !== null && pnl >= 0 ? "+" : "";
 
   return (
@@ -37,7 +34,7 @@ function TradeRow({ trade }: { trade: TradeInfo }) {
       <span className={`shrink-0 w-10 py-1 rounded text-[10px] font-bold font-mono text-center uppercase ${
         isYes ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"
       }`}>
-        {isYes ? "Buy" : "Sell"}
+        {isYes ? t?.("buy") ?? "Buy" : t?.("sell") ?? "Sell"}
       </span>
       <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700/50 flex items-center justify-center shrink-0">
         <span className="text-[10px] font-mono text-zinc-500">
@@ -48,7 +45,7 @@ function TradeRow({ trade }: { trade: TradeInfo }) {
         <div className="text-[13px] text-zinc-200 truncate leading-tight">
           {trade.market || "Unknown market"}
         </div>
-        <div className="text-[10px] text-zinc-500 mt-0.5 font-mono">{trade.side ?? "Buy"}</div>
+        <div className="text-[10px] text-zinc-500 mt-0.5 font-mono">{trade.side ?? (t?.("buy") ?? "Buy")}</div>
       </div>
       <div className="shrink-0 text-[11px] font-mono text-zinc-500 w-14 text-right">
         {timeAgo(trade.ts)}
@@ -60,15 +57,15 @@ function TradeRow({ trade }: { trade: TradeInfo }) {
           </div>
         )}
         {trade.size && (
-          <div className="text-[10px] text-zinc-600 font-mono">{trade.size} shares</div>
+          <div className="text-[10px] text-zinc-600 font-mono">{trade.size} {t?.("shares") ?? "shares"}</div>
         )}
       </div>
     </div>
   );
 }
 
-function PositionRow({ pos }: { pos: PositionInfo }) {
-  const isYes = pos.side === "YES" || pos.side === "Yes" || pos.side === "Buy";
+function PositionRow({ pos, t }: { pos: PositionInfo, t: (k: string) => string }) {
+  const isYes = isBuySide(pos.side);
 
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-zinc-800/30 transition-colors border-b border-zinc-800/20">
@@ -95,13 +92,16 @@ function PositionRow({ pos }: { pos: PositionInfo }) {
       </div>
       <div className="shrink-0 text-right w-20">
         <div className="text-[13px] font-mono text-zinc-300">{pos.size ?? "?"}</div>
-        <div className="text-[10px] text-zinc-600 font-mono">shares</div>
+        <div className="text-[10px] text-zinc-600 font-mono">{t?.("shares") ?? "shares"}</div>
       </div>
     </div>
   );
 }
 
 type FeedTab = "predictions" | "tokens" | "search" | "positions";
+
+import { useAppStore } from "../shared/store/useAppStore";
+import { buildTranslator } from "../shared/lib/i18n";
 
 export default function TradeFeed({
   trades,
@@ -116,6 +116,8 @@ export default function TradeFeed({
 }) {
   const [tab, setTab] = useState<FeedTab>("predictions");
   const [searchQuery, setSearchQuery] = useState("");
+  const { language } = useAppStore();
+  const t = buildTranslator(language);
 
   // Filter trades by search query
   const filteredTrades = useMemo(() => {
@@ -133,13 +135,6 @@ export default function TradeFeed({
   }, [positions, searchQuery]);
 
   // Tab header info
-  const headerText: Record<FeedTab, string> = {
-    predictions: "Activity",
-    tokens: "Tokens",
-    search: "Search",
-    positions: "My Positions",
-  };
-
   const statsText: Record<FeedTab, string> = {
     predictions: `${totalTrades} trades · ${positions.length} open`,
     tokens: `${tick.markets ?? 0} markets`,
@@ -148,35 +143,58 @@ export default function TradeFeed({
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="shrink-0 px-4 py-2.5 border-b border-zinc-800/40 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400">
-            {headerText[tab]}
-          </span>
-          <span className="text-[10px] font-mono text-zinc-600">
-            {statsText[tab]}
-          </span>
-        </div>
+    <Panel className="flex flex-col h-full bg-zinc-950">
+      {/* Sleek Top Tabs */}
+      <div className="shrink-0 border-b border-zinc-800/60 bg-zinc-900/40 p-1.5 flex items-center gap-1">
+        <NavTab
+          active={tab === "predictions"}
+          onClick={() => setTab("predictions")}
+          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>}
+          label="Activity"
+        />
+        <NavTab
+          active={tab === "positions"}
+          onClick={() => setTab("positions")}
+          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>}
+          label="Positions"
+        />
+        <NavTab
+          active={tab === "tokens"}
+          onClick={() => setTab("tokens")}
+          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>}
+          label="Tokens"
+        />
+        <NavTab
+          active={tab === "search"}
+          onClick={() => setTab("search")}
+          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>}
+          label="Search"
+        />
+      </div>
+
+      {/* Header Info */}
+      <div className="shrink-0 px-4 py-2 border-b border-zinc-800/40 flex items-center justify-between">
+        <span className="text-[10px] font-mono text-zinc-500 tracking-wide">
+          {statsText[tab]}
+        </span>
       </div>
 
       {/* Search bar — only for search tab */}
       {tab === "search" && (
-        <div className="shrink-0 px-4 py-2 border-b border-zinc-800/30">
+        <div className="shrink-0 px-4 py-2 border-b border-zinc-800/40 bg-zinc-900/20">
           <input
             type="text"
             placeholder="Search markets..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-3 py-1.5 text-[12px] font-mono text-zinc-200 placeholder-zinc-600 outline-none focus:border-zinc-600 transition-colors"
+            className="w-full bg-zinc-800/60 border border-zinc-700/60 rounded px-3 py-1.5 text-[11px] font-mono text-zinc-200 placeholder-zinc-600 outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all"
           />
         </div>
       )}
 
       {/* Column headers — for predictions and search tabs */}
       {(tab === "predictions" || tab === "search" || tab === "positions") && (
-        <div className="shrink-0 flex items-center gap-3 px-4 py-1.5 text-[10px] font-mono uppercase tracking-wider text-zinc-600 border-b border-zinc-800/30">
+        <div className="shrink-0 flex items-center gap-3 px-4 py-1.5 text-[9px] font-mono uppercase tracking-widest text-zinc-600 border-b border-zinc-800/50 bg-zinc-900/20">
           <span className="w-10">Type</span>
           <span className="w-8" />
           <span className="flex-1">Market</span>
@@ -186,21 +204,21 @@ export default function TradeFeed({
       )}
 
       {/* Scrollable feed */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex-1 overflow-y-auto min-h-0 bg-transparent">
         {tab === "predictions" && (
           trades.length === 0 && positions.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-zinc-600 text-sm font-mono">
-              Waiting for trades...
+            <div className="flex items-center justify-center h-full text-zinc-600 text-[11px] font-mono">
+              Waiting for activity...
             </div>
           ) : (
-            <>
+            <div className="divide-y divide-zinc-800/40">
               {positions.map((pos, i) => (
-                <PositionRow key={`pos-${pos.condition_id}-${i}`} pos={pos} />
+                <PositionRow key={`pos-${pos.condition_id}-${i}`} pos={pos} t={t} />
               ))}
               {trades.map((trade, i) => (
-                <TradeRow key={`trade-${trade.ts}-${i}`} trade={trade} />
+                <TradeRow key={`trade-${trade.ts}-${i}`} trade={trade} t={t} />
               ))}
-            </>
+            </div>
           )
         )}
 
@@ -210,66 +228,40 @@ export default function TradeFeed({
 
         {tab === "search" && (
           filteredTrades.length === 0 && filteredPositions.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-zinc-600 text-sm font-mono">
+            <div className="flex items-center justify-center h-full text-zinc-600 text-[11px] font-mono">
               {searchQuery.trim() ? "No results found" : "Type to search trades & positions"}
             </div>
           ) : (
-            <>
+            <div className="divide-y divide-zinc-800/40">
               {filteredPositions.map((pos, i) => (
-                <PositionRow key={`pos-${pos.condition_id}-${i}`} pos={pos} />
+                <PositionRow key={`pos-${pos.condition_id}-${i}`} pos={pos} t={t} />
               ))}
               {filteredTrades.map((trade, i) => (
-                <TradeRow key={`trade-${trade.ts}-${i}`} trade={trade} />
+                <TradeRow key={`trade-${trade.ts}-${i}`} trade={trade} t={t} />
               ))}
-            </>
+            </div>
           )
         )}
 
         {tab === "positions" && (
           positions.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-zinc-600 text-sm font-mono">
+            <div className="flex items-center justify-center h-full text-zinc-600 text-[11px] font-mono">
               No open positions
             </div>
           ) : (
-            positions.map((pos, i) => (
-              <PositionRow key={`pos-${pos.condition_id}-${i}`} pos={pos} />
-            ))
+            <div className="divide-y divide-zinc-800/40">
+              {positions.map((pos, i) => (
+                <PositionRow key={`pos-${pos.condition_id}-${i}`} pos={pos} t={t} />
+              ))}
+            </div>
           )
         )}
       </div>
-
-      {/* Bottom nav — 4 real tabs */}
-      <div className="shrink-0 border-t border-zinc-800/40 px-2 py-2 flex items-center justify-around">
-        <NavButton
-          active={tab === "predictions"}
-          onClick={() => setTab("predictions")}
-          icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>}
-          label="Predictions"
-        />
-        <NavButton
-          active={tab === "tokens"}
-          onClick={() => setTab("tokens")}
-          icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>}
-          label="Tokens"
-        />
-        <NavButton
-          active={tab === "search"}
-          onClick={() => setTab("search")}
-          icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>}
-          label="Search"
-        />
-        <NavButton
-          active={tab === "positions"}
-          onClick={() => setTab("positions")}
-          icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>}
-          label="My Positions"
-        />
-      </div>
-    </div>
+    </Panel>
   );
 }
 
-function NavButton({ active, onClick, icon, label }: {
+function NavTab({ active, onClick, icon, label }: {
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
@@ -278,12 +270,14 @@ function NavButton({ active, onClick, icon, label }: {
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-[10px] font-mono transition-colors ${
-        active ? "text-zinc-200 bg-zinc-800/50" : "text-zinc-500 hover:text-zinc-400"
+      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-[10px] uppercase font-mono font-semibold tracking-wider transition-all ${
+        active 
+          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+          : "text-zinc-500 border border-transparent hover:bg-zinc-800/50 hover:text-zinc-300"
       }`}
     >
       {icon}
-      <span>{label}</span>
+      {label}
     </button>
   );
 }

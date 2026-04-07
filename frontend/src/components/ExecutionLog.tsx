@@ -1,5 +1,8 @@
 import { useRef, useEffect } from "react";
 import type { LogEntry } from "../hooks/useBot";
+import { fmtTime } from "../shared/lib/format";
+import { useAppStore } from "../shared/store/useAppStore";
+import { buildTranslator } from "../shared/lib/i18n";
 
 const TYPE_STYLES: Record<string, string> = {
   EVAL: "log-eval",
@@ -17,6 +20,8 @@ export default function ExecutionLog({
   connected: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { language } = useAppStore();
+  const t = buildTranslator(language);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -28,11 +33,11 @@ export default function ExecutionLog({
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="shrink-0 flex items-center justify-between px-5 py-2 border-b border-zinc-800/30">
-        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">
-          execution log
+      <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-zinc-800/60 flex-row bg-zinc-900/40">
+        <div className="text-[11px] font-mono font-semibold uppercase tracking-widest text-zinc-300">
+          {t("executionLog")}
         </div>
-        <div className="text-[10px] font-mono text-zinc-600">
+        <div className="text-[10px] font-mono text-zinc-600 bg-zinc-800/40 px-2 py-0.5 rounded">
           {entries.length} entries
         </div>
       </div>
@@ -40,10 +45,10 @@ export default function ExecutionLog({
       {/* Log entries */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-5 py-1.5 min-h-0"
+        className="flex-1 overflow-y-auto px-4 py-2.5 min-h-0 bg-zinc-900/20"
       >
         {entries.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-zinc-600 text-xs font-mono">
+          <div className="h-full flex items-center justify-center text-zinc-600 text-[11px] font-mono">
             {connected ? "Waiting for trades..." : "Disconnected"}
           </div>
         ) : (
@@ -56,7 +61,7 @@ export default function ExecutionLog({
                 {entry.type}
               </span>
               <span className="text-zinc-400 break-all flex-1">{entry.msg}</span>
-              <span className="text-zinc-600 shrink-0 text-[10px]">{entry.ts}</span>
+              <span className="text-zinc-600 shrink-0 text-[10px]">{fmtTime(entry.ts, language, useAppStore.getState().timezone)}</span>
             </div>
           ))
         )}

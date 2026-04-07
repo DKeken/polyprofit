@@ -78,7 +78,7 @@ impl DataApiClient {
             .timeout(Duration::from_secs(15))
             .user_agent("polyprofit-whale-tracker/1.0")
             .build()
-            .expect("failed to build reqwest client");
+            .unwrap_or_else(|_| reqwest::Client::new());
         Self { http }
     }
 

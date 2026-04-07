@@ -229,6 +229,12 @@ async fn main() -> Result<()> {
     state.load_asset_registry(&config.asset_definitions);
     restore_persisted_state(&state, &config);
 
+    if let Some(db) = state.db.as_ref() {
+        if let Err(e) = db.backfill_equity_if_empty(&state.trades.read()) {
+            tracing::warn!("Failed to backfill equity curve: {}", e);
+        }
+    }
+
     let fee_cache = fee_cache::new_fee_cache();
 
     let assets: Vec<Asset> = config.strategy.assets.iter().map(|s| Asset::new(s)).collect();

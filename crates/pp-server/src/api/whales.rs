@@ -40,7 +40,11 @@ pub async fn list_whales(State(state): State<Arc<AppState>>) -> Json<WhalesRespo
             }
         })
         .collect();
-    whales.sort_by(|a, b| b.profit.partial_cmp(&a.profit).unwrap_or(std::cmp::Ordering::Equal));
+    whales.sort_by(|a, b| {
+        let pa: f64 = a.profit.parse().unwrap_or(0.0);
+        let pb: f64 = b.profit.parse().unwrap_or(0.0);
+        pb.partial_cmp(&pa).unwrap_or(std::cmp::Ordering::Equal)
+    });
     let total = whales.len();
     Json(WhalesResponse { whales, total })
 }
@@ -276,4 +280,34 @@ pub async fn whale_history(
             (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": msg }))).into_response()
         }
     }
+}
+
+pub async fn market_slug(
+    Path(condition_id): Path<String>,
+) -> impl IntoResponse {
+    // CLOB API is the correct one — condition_id is a path param, returns the actual market.
+    // Gamma API ignores condition_id as query param and returns random results.
+    let url = format!("https://clob.polymarket.com/markets/{}", condition_id);
+    let client = reqwest::Client::new();
+    match client.get(&url).send().await {
+        Ok(resp) if resp.status().is_success() => {
+            if let Ok(val) = resp.json::<serde_json::Value>().await {
+                // CLOB returns { market_slug: "...", ... }
+                if let Some(slug) = val.get("market_slug").and_then(|s| s.as_str()) {
+                    if !slug.is_empty() {
+                        return (
+                            StatusCode::OK,
+                            Json(serde_json::json!({ "slug": slug })),
+                        ).into_response();
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    (
+        StatusCode::NOT_FOUND,
+        Json(serde_json::json!({ "error": "slug not found" })),
+    ).into_response()
 }

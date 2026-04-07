@@ -38,7 +38,20 @@ async fn run_scan(state: &Arc<AppState>) {
 /// Fetch and record the latest trades for all **followed** whales.
 /// Emits `whale_alert_count` increments for trades above ALERT_THRESHOLD_USDC.
 /// Uses `whale_seen_activity` DashMap for deduplication.
+///
+/// NOTE: the dedup map is capped at 50 000 entries to prevent unbounded growth.
+const DEDUP_MAP_CAP: usize = 50_000;
+
 async fn run_followed_watch(state: &Arc<AppState>) {
+    // Prevent unbounded memory growth in the dedup map
+    if state.whale_seen_activity.len() > DEDUP_MAP_CAP {
+        tracing::debug!(
+            entries = state.whale_seen_activity.len(),
+            "dedup map exceeded cap, clearing"
+        );
+        state.whale_seen_activity.clear();
+    }
+
     let client = DataApiClient::new();
 
     // Collect followed whale addresses

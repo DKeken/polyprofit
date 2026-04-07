@@ -4,7 +4,7 @@
  * Only exports React components + the context/hook so Fast Refresh works.
  * The useWhaleAlerts hook lives in ./useWhaleAlerts.ts
  */
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import { Info, CheckCircle2, AlertTriangle, XCircle, Search, X } from "lucide-react";
 
 export type ToastType = "info" | "success" | "warning" | "error" | "whale";
@@ -84,9 +84,9 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: () => void }) 
           setVisible(false);
           setTimeout(onRemove, 300);
         }}
-        className="text-zinc-600 hover:text-zinc-300 transition-colors text-[10px] font-mono shrink-0"
+        className="text-zinc-600 hover:text-zinc-300 transition-colors shrink-0 p-0.5"
       >
-        ✕
+        <X className="w-3.5 h-3.5" />
       </button>
 
       {/* Timer progress bar */}
@@ -100,10 +100,27 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: () => void }) 
 
 let toastIdCounter = 0;
 
+/** Dedup window — ignore toasts with same title within this window */
+const DEDUP_WINDOW_MS = 3000;
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const recentTitlesRef = useRef<Map<string, number>>(new Map());
 
   const addToast = useCallback((t: Omit<Toast, "id">) => {
+    // Dedup: skip if same title was shown recently
+    const now = Date.now();
+    const lastShown = recentTitlesRef.current.get(t.title);
+    if (lastShown && now - lastShown < DEDUP_WINDOW_MS) {
+      return;
+    }
+    recentTitlesRef.current.set(t.title, now);
+
+    // Clean stale dedup entries
+    for (const [key, ts] of recentTitlesRef.current) {
+      if (now - ts > DEDUP_WINDOW_MS * 2) recentTitlesRef.current.delete(key);
+    }
+
     const id = ++toastIdCounter;
     setToasts((prev) => {
       const next = [...prev, { ...t, id }];
@@ -120,7 +137,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       {/* Toast stack — fixed top-right overlay */}
       <div
-        className="fixed top-4 right-4 flex flex-col gap-2 items-end pointer-events-none"
+        className="fixed top-14 right-4 flex flex-col gap-2 items-end pointer-events-none"
         style={{ zIndex: 9999 }}
       >
         <style>{`

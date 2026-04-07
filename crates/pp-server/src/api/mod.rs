@@ -15,6 +15,7 @@ use pp_core::AppState;
 pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
         .route("/status", get(admin::status))
+        .route("/wallet", get(admin::wallet_info))
         .route("/positions", get(trading::positions))
         .route("/trades", get(trading::trades))
         .route("/markets", get(trading::markets))
@@ -34,6 +35,7 @@ pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/whales/track", axum::routing::post(whales::track_whale))
         .route("/whales/bulk", axum::routing::post(whales::bulk_action))
         .route("/whales/scan-status", get(whales::scan_status))
+        .route("/whales/slug/{condition_id}", get(whales::market_slug))
         .route("/whales/{address}/follow", axum::routing::post(whales::toggle_follow))
         .route("/whales/{address}/history", get(whales::whale_history))
         .route("/whales/{address}", axum::routing::delete(whales::untrack_whale))

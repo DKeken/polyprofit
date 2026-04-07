@@ -7,6 +7,9 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api";
+import { useAppStore } from "../shared/store/useAppStore";
+import { fmtTimeSimple } from "../shared/lib/format";
+import { fmtTimeSimple } from "../shared/lib/format";
 
 // ── Re-export Rust-generated types for component use ──
 export type { Tick } from "@server-bindings/Tick";
@@ -81,33 +84,47 @@ export function useBot() {
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const logIdRef = useRef(0);
 
-  // Load persisted PnL history on mount (so equity curve survives page refresh)
+  // Global store values
+  const { dataPeriod } = useAppStore();
+
+  // Load persisted PnL history on mount & when period changes
   useEffect(() => {
+    let cancelled = false;
     api
-      .pnlHistory()
+      .pnlHistory(dataPeriod)
       .then((res) => {
+        if (cancelled) return;
         if (res.points.length > 0) {
-          const initial: PnlPoint[] = res.points.map((p) => ({
-            time: p.time,
-            pnl: parseFloat(p.pnl) || 0,
-          }));
+          const initial: PnlPoint[] = res.points.map((p) => {
+            const dt = new Date(p.time);
+            return {
+              time: isNaN(dt.getTime())
+                ? p.time
+                : fmtTimeSimple(p.time),
+              pnl: parseFloat(p.pnl) || 0,
+            };
+          });
           setPnlHistory(initial);
+        } else {
+          setPnlHistory([]);
         }
       })
       .catch(() => {
         /* ignore — old backend without this endpoint */
       });
-  }, []);
+      return () => { cancelled = true; };
+  }, [dataPeriod]);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let stopped = false;
     let delay = 1000;
+    let lastPointTime = 0;
 
     function tradeToLogEntry(trade: Tick["trades"][number]): LogEntry | null {
       const pnl = trade.pnl ? parseFloat(trade.pnl) : null;
-      const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const ts = fmtTimeSimple(new Date().toISOString());
       if (trade.adverse) {
         return { id: logIdRef.current++, ts, type: 'ERR', msg: `Adverse fill: ${trade.market?.slice(0, 40)}` };
       }
@@ -135,14 +152,22 @@ export function useBot() {
         try {
           const data = JSON.parse(ev.data) as Tick;
           setTick(data);
+          
           setPnlHistory((prev) => {
+            const currentPnl = parseFloat(data.total_pnl) || 0;
+            const now = Date.now();
+            const lastPnl = prev.length > 0 ? prev[prev.length - 1].pnl : null;
+            
+            // Limit point addition: only if pnl changed, or every 10 seconds
+            if (lastPnl === currentPnl && now - lastPointTime < 10000) {
+              return prev;
+            }
+            
+            lastPointTime = now;
+            
             const point: PnlPoint = {
-              time: new Date().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-              }),
-              pnl: parseFloat(data.total_pnl) || 0,
+              time: fmtTimeSimple(new Date().toISOString()),
+              pnl: currentPnl,
             };
             const next = [...prev, point];
             return next.length > MAX_PNL_POINTS

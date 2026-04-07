@@ -59,12 +59,22 @@ impl LocalWallet {
     /// Returns `Ok(None)` if the var is not set.
     /// Returns `Err` if the var is set to an invalid value.
     pub fn from_env() -> Result<Option<Self>> {
+        static CACHED_WALLET: std::sync::OnceLock<Option<LocalWallet>> = std::sync::OnceLock::new();
+
+        if let Some(cached) = CACHED_WALLET.get() {
+            return Ok(cached.clone());
+        }
+
         let raw = match std::env::var("POLYMARKET_PRIVATE_KEY").ok() {
             Some(v) => v,
-            None => return Ok(None),
+            None => {
+                let _ = CACHED_WALLET.set(None);
+                return Ok(None);
+            }
         };
         // A UUID-shaped value is a CLOB API key, not an EVM private key — skip silently.
         if is_uuid(raw.trim()) {
+            let _ = CACHED_WALLET.set(None);
             return Ok(None);
         }
         if raw.trim().is_empty() {
@@ -72,6 +82,8 @@ impl LocalWallet {
         }
         let wallet = Self::from_hex(&raw)?;
         info!(address = %wallet.address(), "LocalWallet loaded from env");
+        
+        let _ = CACHED_WALLET.set(Some(wallet.clone()));
         Ok(Some(wallet))
     }
 

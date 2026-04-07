@@ -20,6 +20,7 @@ pub struct AuthResponse {
 #[derive(Serialize)]
 pub struct StatusResponse {
     pub authenticated: bool,
+    pub wallet_address: Option<String>,
     pub paused: bool,
     pub heartbeat_alive: bool,
     pub daily_pnl: String,
@@ -31,6 +32,14 @@ pub struct StatusResponse {
     pub orders_filled: u64,
     pub adverse_fills: u64,
     pub ws_reconnects: u64,
+}
+
+/// On-chain wallet information fetched via RPC
+#[derive(Serialize)]
+pub struct WalletInfoResponse {
+    pub address: String,
+    pub matic_balance: String,
+    pub usdc_balance: String,
 }
 
 #[derive(Serialize)]

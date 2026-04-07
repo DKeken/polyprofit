@@ -7,6 +7,7 @@
  */
 
 import type { ConfigSnapshot } from "@server-bindings/ConfigSnapshot";
+import type { DataPeriod } from "./shared/store/useAppStore";
 
 // ── Response types for mutating endpoints ──
 
@@ -122,6 +123,8 @@ export interface TradesExportResponse {
 
 const BASE = "";
 
+type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+
 async function parseJsonResponse<T>(
   res: Response,
 ): Promise<T | ConfigErrorResponse | null> {
@@ -143,67 +146,65 @@ function responseErrorMessage(
     : `${method} ${path}: ${status}`;
 }
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
+async function request<T>(
+  method: HttpMethod,
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const init: RequestInit = { method };
+  if (body !== undefined) {
+    init.headers = { "Content-Type": "application/json" };
+    init.body = JSON.stringify(body);
+  }
+  const res = await fetch(`${BASE}${path}`, init);
   const payload = await parseJsonResponse<T>(res);
   if (!res.ok) {
     throw new ApiError(
-      responseErrorMessage("GET", path, res.status, payload),
+      responseErrorMessage(method, path, res.status, payload),
       res.status,
     );
   }
   return payload as T;
 }
 
-async function post<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { method: "POST" });
-  const payload = await parseJsonResponse<T>(res);
-  if (!res.ok) {
-    throw new ApiError(
-      responseErrorMessage("POST", path, res.status, payload),
-      res.status,
-    );
-  }
-  return payload as T;
+const get = <T>(path: string) => request<T>("GET", path);
+const post = <T>(path: string) => request<T>("POST", path);
+const postJson = <T>(path: string, body: unknown) => request<T>("POST", path, body);
+const put = <T>(path: string, body: unknown) => request<T>("PUT", path, body);
+
+// ── Status ──
+
+export interface StatusResponse {
+  authenticated: boolean;
+  wallet_address: string | null;
+  paused: boolean;
+  heartbeat_alive: boolean;
+  daily_pnl: string;
+  active_positions: number;
+  active_orders: number;
+  active_markets: number;
+  signals_generated: number;
+  orders_placed: number;
+  orders_filled: number;
+  adverse_fills: number;
+  ws_reconnects: number;
 }
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const payload = await parseJsonResponse<T>(res);
-  if (!res.ok) {
-    throw new ApiError(
-      responseErrorMessage("POST", path, res.status, payload),
-      res.status,
-    );
-  }
-  return payload as T;
-}
-
-async function put<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  const payload = await parseJsonResponse<T>(res);
-  if (!res.ok) {
-    throw new ApiError(
-      responseErrorMessage("PUT", path, res.status, payload),
-      res.status,
-    );
-  }
-
-  return payload as T;
+export interface WalletInfoResponse {
+  address: string;
+  matic_balance: string;
+  usdc_balance: string;
 }
 
 // ── Public API ──
 
 export const api = {
+  /** Get system status (auth state, metrics) */
+  getStatus: () => get<StatusResponse>("/api/status"),
+
+  /** Get on-chain wallet info (address, MATIC, USDC balances) */
+  getWalletInfo: () => get<WalletInfoResponse>("/api/wallet"),
+
   /** Pause the bot */
   pause: () => post<PauseResponse>("/api/pause"),
 
@@ -218,7 +219,10 @@ export const api = {
     put<ConfigUpdateResponse>("/api/config", updates),
 
   /** Load PnL history from persisted trades (for equity curve on page load) */
-  pnlHistory: () => get<PnlHistoryResponse>("/api/pnl-history"),
+  pnlHistory: (period?: DataPeriod) => {
+    const q = period ? `?period=${period}` : "";
+    return get<PnlHistoryResponse>(`/api/pnl-history${q}`);
+  },
 
   /** Fetch active markets */
   getMarkets: () => get<MarketsResponse>("/api/markets"),
@@ -227,7 +231,13 @@ export const api = {
   refreshMarkets: () => post<RefreshMarketsResponse>("/api/markets/refresh"),
 
   /** Full analytics: win rate, profit factor, by-asset breakdown */
-  analytics: () => get<AnalyticsResponse>("/api/analytics"),
+  analytics: (period?: DataPeriod) => {
+    const q = period ? `?period=${period}` : "";
+    return get<AnalyticsResponse>(`/api/analytics${q}`);
+  },
+
+  /** Fetch recent trades (last 50) */
+  getTrades: () => get<TradesExportResponse>("/api/trades"),
 
   /** Database statistics */
   dbStats: () => get<DbStatsResponse>("/api/db/stats"),

@@ -23,4 +23,8 @@ volume: string, markets_traded: bigint, last_seen: string,
 /**
  * Whether we mirror this whale's signals in our strategy
  */
-followed: boolean, };
+followed: boolean, 
+/**
+ * Soft-delete: archived whales are hidden from active list but retained in DB
+ */
+archived: boolean, };

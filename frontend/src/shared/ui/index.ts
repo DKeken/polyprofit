@@ -6,3 +6,5 @@ export * from "./Badge";
 export * from "./Input";
 export * from "./Select";
 export * from "./ToastProvider";
+export * from "./Checkbox";
+export * from "./ResizeDivider";

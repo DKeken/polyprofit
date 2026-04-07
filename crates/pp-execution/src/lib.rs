@@ -58,7 +58,26 @@ impl AutoSigner {
             .context("CLOB authentication failed")?;
 
         if has_creds {
-            ClobClient::start_heartbeats(&mut client)?;
+            // The SDK may panic inside start_heartbeats ("period must be non-zero")
+            // due to internal timer configuration issues. Catch the panic and convert
+            // it into a recoverable error so the rest of the app can continue.
+            let hb_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                ClobClient::start_heartbeats(&mut client)
+            }));
+            match hb_result {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    tracing::warn!("start_heartbeats returned error (non-fatal): {e}");
+                }
+                Err(panic_payload) => {
+                    let msg = panic_payload
+                        .downcast_ref::<String>()
+                        .map(|s| s.as_str())
+                        .or_else(|| panic_payload.downcast_ref::<&str>().copied())
+                        .unwrap_or("unknown panic");
+                    tracing::warn!("start_heartbeats panicked (non-fatal): {msg}");
+                }
+            }
         }
         Ok(client)
     }

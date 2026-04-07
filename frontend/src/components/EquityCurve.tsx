@@ -1,4 +1,7 @@
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from "recharts";
+import { useAppStore } from "../shared/store/useAppStore";
+import { buildTranslator } from "../shared/lib/i18n";
+import { fmtTime } from "../shared/lib/format";
 
 interface PnlPoint {
   time: string;
@@ -6,23 +9,23 @@ interface PnlPoint {
 }
 
 export default function EquityCurve({ data }: { data: PnlPoint[] }) {
+  const { dataPeriod, language } = useAppStore();
+  const t = buildTranslator(language);
+
   const hasData = data.length > 1;
   const latest = hasData ? data[data.length - 1] : null;
   const isPositive = latest ? latest.pnl >= 0 : true;
   const strokeColor = isPositive ? "#34d399" : "#f87171";
 
   return (
-    <div className="h-full flex flex-col border-b border-zinc-800/40">
+    <div className="h-full flex flex-col pt-1">
       {/* Header */}
-      <div className="shrink-0 flex items-center justify-between px-5 pt-3 pb-1">
-        <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">
-          equity curve <span className="text-zinc-700 mx-1">//</span>
-          <span className="text-zinc-400">btc arb</span>
+      <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-zinc-900/40 border-b border-zinc-800/60 flex-row">
+        <div className="text-[11px] font-mono font-semibold uppercase tracking-widest text-zinc-300">
+          {t("equityCurve")}
         </div>
-        <div className="flex items-center gap-3 text-[10px] font-mono text-zinc-600">
-          <span>8.00</span>
-          <span className="text-zinc-700">/</span>
-          <span>All</span>
+        <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-600 bg-zinc-800/40 px-2 py-0.5 rounded uppercase">
+          <span>{dataPeriod}</span>
         </div>
       </div>
 
@@ -85,7 +88,7 @@ export default function EquityCurve({ data }: { data: PnlPoint[] }) {
             </AreaChart>
           </ResponsiveContainer>
         ) : (
-          <div className="h-full flex items-center justify-center text-zinc-600 text-sm font-mono">
+          <div className="h-full flex items-center justify-center text-zinc-600 text-[11px] font-mono">
             Waiting for data...
           </div>
         )}
