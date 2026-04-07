@@ -1,7 +1,44 @@
+# Rust
 /target
+debug/
+*.pdb
+
+# Environment / secrets
 .env
-*.mp4
+.env.local
+.env.*.local
+
+# Frontend
 frontend/node_modules
 frontend/dist
-polyprofit.db
-polyprofit.db.tmp
+frontend/.vite
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+*.db-tmp
+
+# Media
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.iml
+.vscode/*.log
+
+# Logs
+*.log
+logs/
+
+# Tool-generated
+.playwright-mcp/
+.swarm/
+.claude-flow/
