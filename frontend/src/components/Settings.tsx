@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { BotConfig } from "../hooks/useBot";
 import type { AssetDefInfo } from "@server-bindings/AssetDefInfo";
+import { Panel, Input, Select, Button, Badge } from "../shared/ui";
 
 interface Props {
   config: BotConfig;
@@ -14,25 +15,132 @@ interface FieldDef {
   type: "decimal" | "integer" | "select";
   options?: string[];
   hint?: string;
-  icon?: string;
+  min?: number;
+  max?: number;
+  step?: number;
 }
 
 const FIELDS: FieldDef[] = [
-  { key: "min_edge", label: "Min Edge", group: "strategy", type: "decimal", hint: "0.01–0.50", icon: "📐" },
-  { key: "min_prob", label: "Min Probability", group: "strategy", type: "decimal", hint: "0.01–0.99", icon: "📉" },
-  { key: "max_prob", label: "Max Probability", group: "strategy", type: "decimal", hint: "0.01–0.99", icon: "📈" },
-  { key: "max_spread", label: "Max Spread", group: "strategy", type: "decimal", hint: "Skip wide spreads", icon: "↔" },
-  { key: "order_strategy", label: "Order Strategy", group: "strategy", type: "select", options: ["Passive", "Balanced", "Aggressive"], icon: "⚡" },
-  { key: "market_refresh_secs", label: "Market Refresh", group: "strategy", type: "integer", hint: "seconds", icon: "🔄" },
-  { key: "daily_loss_limit", label: "Daily Loss Limit", group: "risk", type: "decimal", hint: "Negative, e.g. -100", icon: "🛑" },
-  { key: "daily_profit_cap", label: "Daily Profit Cap", group: "risk", type: "decimal", hint: "Stop after this P&L", icon: "🎯" },
-  { key: "max_position_pct", label: "Max Position Size", group: "risk", type: "decimal", hint: "0–1 (fraction)", icon: "📊" },
-  { key: "max_concurrent", label: "Max Concurrent", group: "risk", type: "integer", hint: "Parallel positions", icon: "🔢" },
-  { key: "drawdown_limit", label: "Drawdown Limit", group: "risk", type: "decimal", hint: "0–1 (e.g. 0.20 = 20%)", icon: "📉" },
-  { key: "adverse_fill_pause", label: "Adverse Fill Pause", group: "risk", type: "integer", hint: "Pause N trades", icon: "⏸" },
+  {
+    key: "min_edge",
+    label: "Min Edge",
+    group: "strategy",
+    type: "decimal",
+    hint: "Minimum expected value (0.01–0.50)",
+    min: 0.01,
+    max: 0.5,
+    step: 0.01,
+  },
+  {
+    key: "min_prob",
+    label: "Min Probability",
+    group: "strategy",
+    type: "decimal",
+    hint: "0.01–0.99",
+    min: 0.01,
+    max: 0.99,
+    step: 0.01,
+  },
+  {
+    key: "max_prob",
+    label: "Max Probability",
+    group: "strategy",
+    type: "decimal",
+    hint: "0.01–0.99",
+    min: 0.01,
+    max: 0.99,
+    step: 0.01,
+  },
+  {
+    key: "max_spread",
+    label: "Max Spread",
+    group: "strategy",
+    type: "decimal",
+    hint: "Skip wide spreads",
+    min: 0.01,
+    max: 0.2,
+    step: 0.01,
+  },
+  {
+    key: "order_strategy",
+    label: "Order Strategy",
+    group: "strategy",
+    type: "select",
+    options: ["Passive", "Balanced", "Aggressive"],
+  },
+  {
+    key: "market_refresh_secs",
+    label: "Market Refresh",
+    group: "strategy",
+    type: "integer",
+    hint: "seconds",
+    min: 1,
+    max: 120,
+    step: 1,
+  },
+  {
+    key: "daily_loss_limit",
+    label: "Daily Loss Limit",
+    group: "risk",
+    type: "decimal",
+    hint: "Negative USD amount, e.g. -100",
+  },
+  {
+    key: "daily_profit_cap",
+    label: "Daily Profit Cap",
+    group: "risk",
+    type: "decimal",
+    hint: "Stop after this P&L (USD)",
+  },
+  {
+    key: "max_position_pct",
+    label: "Max Position Size",
+    group: "risk",
+    type: "decimal",
+    hint: "0–1 (fraction of capital)",
+    min: 0.01,
+    max: 1.0,
+    step: 0.01,
+  },
+  {
+    key: "max_concurrent",
+    label: "Max Concurrent",
+    group: "risk",
+    type: "integer",
+    hint: "Parallel positions",
+    min: 1,
+    max: 20,
+    step: 1,
+  },
+  {
+    key: "drawdown_limit",
+    label: "Drawdown Limit",
+    group: "risk",
+    type: "decimal",
+    hint: "0–1 (e.g. 0.20 = 20%)",
+    min: 0.01,
+    max: 1.0,
+    step: 0.01,
+  },
+  {
+    key: "adverse_fill_pause",
+    label: "Adverse Fill Pause",
+    group: "risk",
+    type: "integer",
+    hint: "Pause N trades",
+    min: 0,
+    max: 10,
+    step: 1,
+  },
 ];
 
-const EMPTY_DEF: AssetDefInfo = { symbol: "", binance_symbol: "", keywords: [] };
+const EMPTY_DEF: AssetDefInfo = {
+  symbol: "",
+  binance_symbol: "",
+  keywords: [],
+};
+
+type Tab = "strategy" | "risk" | "assets";
 
 export default function Settings({ config, onSave }: Props) {
   const initialDraft = Object.fromEntries(
@@ -44,8 +152,12 @@ export default function Settings({ config, onSave }: Props) {
   const [draftDefs, setDraftDefs] = useState<AssetDefInfo[]>(
     config.asset_definitions?.map((d) => ({ ...d })) ?? [],
   );
+
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+
+  const [activeTab, setActiveTab] = useState<Tab>("strategy");
+  const [search, setSearch] = useState("");
 
   const knownAssets = draftDefs.map((d) => d.symbol).filter(Boolean);
 
@@ -70,7 +182,11 @@ export default function Settings({ config, onSave }: Props) {
     );
   }
 
-  function updateDef(idx: number, field: keyof AssetDefInfo, value: string | string[]) {
+  function updateDef(
+    idx: number,
+    field: keyof AssetDefInfo,
+    value: string | string[],
+  ) {
     setDraftDefs((prev) => {
       const next = [...prev];
       next[idx] = { ...next[idx], [field]: value };
@@ -109,9 +225,7 @@ export default function Settings({ config, onSave }: Props) {
       updates.asset_definitions = draftDefs.map((d) => ({
         symbol: d.symbol.trim().toUpperCase(),
         binance_symbol: d.binance_symbol.trim().toUpperCase(),
-        keywords: d.keywords
-          .map((k) => k.trim().toLowerCase())
-          .filter(Boolean),
+        keywords: d.keywords.map((k) => k.trim().toLowerCase()).filter(Boolean),
       }));
     }
 
@@ -134,248 +248,313 @@ export default function Settings({ config, onSave }: Props) {
     setSaving(false);
   }
 
+  const filteredFields = useMemo(() => {
+    if (!search) return FIELDS;
+    const lowerSearch = search.toLowerCase();
+    return FIELDS.filter(
+      (f) =>
+        f.label.toLowerCase().includes(lowerSearch) ||
+        f.key.toLowerCase().includes(lowerSearch),
+    );
+  }, [search]);
+
   function renderField(f: FieldDef) {
     const val = draft[f.key] ?? "";
     const isChanged = val !== String(config[f.key]);
 
     if (f.type === "select" && f.options) {
       return (
-        <div key={f.key}>
-          <label className="text-[11px] text-zinc-500 block mb-1.5 font-medium">
-            {f.icon && <span className="mr-1">{f.icon}</span>}
+        <div key={f.key} className="space-y-1.5">
+          <label className="text-[11px] text-zinc-400 font-medium uppercase tracking-wider block">
             {f.label}
           </label>
-          <select
+          <Select
             value={val}
             onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
-            className={`w-full bg-zinc-800/60 border rounded-lg px-3 py-2 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all ${
-              isChanged
-                ? "border-emerald-600/60 bg-emerald-500/5"
-                : "border-zinc-700/60"
-            }`}
+            className={
+              isChanged ? "border-emerald-500/50 bg-emerald-500/5" : ""
+            }
           >
             {f.options.map((o) => (
               <option key={o} value={o}>
                 {o}
               </option>
             ))}
-          </select>
+          </Select>
+          {f.hint && <p className="text-[10px] text-zinc-500">{f.hint}</p>}
         </div>
       );
     }
 
+    const hasSlider =
+      f.min !== undefined && f.max !== undefined && f.step !== undefined;
+
     return (
-      <div key={f.key}>
-        <label className="text-[11px] text-zinc-500 block mb-1.5 font-medium">
-          {f.icon && <span className="mr-1">{f.icon}</span>}
-          {f.label}
-          {f.hint && (
-            <span className="text-zinc-600 ml-1 font-normal">({f.hint})</span>
-          )}
-        </label>
-        <input
-          type="text"
-          value={val}
-          onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
-          className={`w-full bg-zinc-800/60 border rounded-lg px-3 py-2 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all ${
-            isChanged
-              ? "border-emerald-600/60 bg-emerald-500/5"
-              : "border-zinc-700/60"
-          }`}
-        />
+      <div key={f.key} className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-[11px] text-zinc-400 font-medium uppercase tracking-wider">
+            {f.label}
+          </label>
+          {isChanged && <Badge color="emerald">Modified</Badge>}
+        </div>
+
+        {hasSlider ? (
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={f.min}
+              max={f.max}
+              step={f.step}
+              value={val}
+              onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
+              className="flex-1 accent-emerald-500 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer"
+            />
+            <Input
+              type="number"
+              min={f.min}
+              max={f.max}
+              step={f.step}
+              value={val}
+              onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
+              className={`w-20 text-right ${isChanged ? "border-emerald-500/50 bg-emerald-500/5" : ""}`}
+            />
+          </div>
+        ) : (
+          <Input
+            type="text"
+            value={val}
+            onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
+            className={
+              isChanged ? "border-emerald-500/50 bg-emerald-500/5" : ""
+            }
+          />
+        )}
+        {f.hint && <p className="text-[10px] text-zinc-500">{f.hint}</p>}
       </div>
     );
   }
 
-  const strategyFields = FIELDS.filter((f) => f.group === "strategy");
-  const riskFields = FIELDS.filter((f) => f.group === "risk");
+  const strategyFields = filteredFields.filter((f) => f.group === "strategy");
+  const riskFields = filteredFields.filter((f) => f.group === "risk");
 
   return (
-    <div className="space-y-4 animate-slide-up">
-      {/* Strategy + Risk side by side on wide screens */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Strategy */}
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 card-glow gradient-border">
-          <h3 className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium mb-4">
-            Strategy Parameters
-          </h3>
-          <div className="grid grid-cols-2 gap-3">
-            {strategyFields.map(renderField)}
-          </div>
+    <div className="flex flex-col h-full space-y-4 animate-slide-up pb-24 p-4">
+      {/* Header: Tabs & Search */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+        <div className="flex space-x-1 p-1 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+          {(["strategy", "risk", "assets"] as Tab[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-1.5 rounded-md text-xs font-medium uppercase tracking-wider transition-colors ${
+                activeTab === tab
+                  ? "bg-zinc-700 text-zinc-100 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
 
-        {/* Risk */}
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 card-glow">
-          <h3 className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium mb-4">
-            Risk Management
-          </h3>
-          <div className="grid grid-cols-2 gap-3">
-            {riskFields.map(renderField)}
-          </div>
+        <div className="w-full sm:w-64">
+          <Input
+            placeholder="Search settings..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
       </div>
 
-      {/* Asset Definitions */}
-      <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 card-glow">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">
-            Asset Definitions
-          </h3>
-          <button
-            onClick={addDef}
-            className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-700/50 transition-all duration-200"
-          >
-            + Add Asset
-          </button>
-        </div>
+      {/* Content Area */}
+      <div className="flex-1 overflow-y-auto pr-2">
+        {activeTab === "strategy" && (
+          <Panel title="Strategy Parameters">
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {strategyFields.length > 0 ? (
+                strategyFields.map(renderField)
+              ) : (
+                <div className="col-span-2 text-center py-8 text-zinc-500 text-sm">
+                  No strategy settings match "{search}"
+                </div>
+              )}
+            </div>
+          </Panel>
+        )}
 
-        {draftDefs.length === 0 ? (
-          <div className="text-zinc-600 text-sm py-6 text-center">
-            No assets defined. Click "+ Add Asset" to start.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {draftDefs.map((def, idx) => (
-              <div
-                key={idx}
-                className="bg-zinc-800/30 rounded-lg border border-zinc-700/40 p-4 animate-fade-in"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
-                    <label className="text-[11px] text-zinc-500 block mb-1.5 font-medium">
-                      Symbol
-                    </label>
-                    <input
-                      type="text"
-                      value={def.symbol}
-                      onChange={(e) => updateDef(idx, "symbol", e.target.value)}
-                      placeholder="BTC"
-                      className="w-full bg-zinc-800/60 border border-zinc-700/60 rounded-lg px-3 py-2 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500/40 uppercase transition-all"
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <label className="text-[11px] text-zinc-500 block mb-1.5 font-medium">
-                      Binance Pair
-                    </label>
-                    <input
-                      type="text"
-                      value={def.binance_symbol}
-                      onChange={(e) =>
-                        updateDef(idx, "binance_symbol", e.target.value)
-                      }
-                      placeholder="BTCUSDT"
-                      className="w-full bg-zinc-800/60 border border-zinc-700/60 rounded-lg px-3 py-2 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500/40 uppercase transition-all"
-                    />
-                  </div>
-                  <div className="pt-6">
-                    <button
-                      onClick={() => removeDef(idx)}
-                      className="px-2.5 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/15 transition-all"
-                      title="Remove asset"
+        {activeTab === "risk" && (
+          <Panel title="Risk Management">
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {riskFields.length > 0 ? (
+                riskFields.map(renderField)
+              ) : (
+                <div className="col-span-2 text-center py-8 text-zinc-500 text-sm">
+                  No risk settings match "{search}"
+                </div>
+              )}
+            </div>
+          </Panel>
+        )}
+
+        {activeTab === "assets" && (
+          <div className="space-y-4">
+            <Panel
+              title="Asset Definitions"
+              action={
+                <Button size="sm" onClick={addDef} variant="primary">
+                  Add Asset
+                </Button>
+              }
+            >
+              {draftDefs.length === 0 ? (
+                <div className="p-8 text-center text-zinc-500 text-sm">
+                  No assets defined. Click Add Asset to start.
+                </div>
+              ) : (
+                <div className="p-4 space-y-4">
+                  {draftDefs.map((def, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-zinc-800/30 rounded-lg border border-zinc-700/40 p-4"
                     >
-                      ✕
-                    </button>
-                  </div>
+                      <div className="flex items-start gap-4">
+                        <div className="flex-1 space-y-1.5 min-w-0">
+                          <label className="text-[11px] text-zinc-400 font-medium uppercase tracking-wider">
+                            Symbol
+                          </label>
+                          <Input
+                            value={def.symbol}
+                            onChange={(e) =>
+                              updateDef(idx, "symbol", e.target.value)
+                            }
+                            placeholder="BTC"
+                            className="uppercase"
+                          />
+                        </div>
+                        <div className="flex-1 space-y-1.5 min-w-0">
+                          <label className="text-[11px] text-zinc-400 font-medium uppercase tracking-wider">
+                            Binance Pair
+                          </label>
+                          <Input
+                            value={def.binance_symbol}
+                            onChange={(e) =>
+                              updateDef(idx, "binance_symbol", e.target.value)
+                            }
+                            placeholder="BTCUSDT"
+                            className="uppercase"
+                          />
+                        </div>
+                        <div className="pt-6">
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => removeDef(idx)}
+                            title="Remove asset"
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="mt-4 space-y-1.5">
+                        <label className="text-[11px] text-zinc-400 font-medium uppercase tracking-wider flex items-center gap-2">
+                          Keywords
+                          <span className="text-[10px] normal-case tracking-normal text-zinc-500">
+                            (comma-separated)
+                          </span>
+                        </label>
+                        <Input
+                          value={def.keywords.join(", ")}
+                          onChange={(e) =>
+                            updateDef(
+                              idx,
+                              "keywords",
+                              e.target.value
+                                .split(",")
+                                .map((k) => k.trim())
+                                .filter(Boolean),
+                            )
+                          }
+                          placeholder="btc, bitcoin"
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="mt-3">
-                  <label className="text-[11px] text-zinc-500 block mb-1.5 font-medium">
-                    Keywords{" "}
-                    <span className="text-zinc-600 font-normal">
-                      — comma-separated for market discovery
-                    </span>
-                  </label>
-                  <input
-                    type="text"
-                    value={def.keywords.join(", ")}
-                    onChange={(e) =>
-                      updateDef(
-                        idx,
-                        "keywords",
-                        e.target.value
-                          .split(",")
-                          .map((k) => k.trim())
-                          .filter(Boolean),
-                      )
-                    }
-                    placeholder="btc, bitcoin"
-                    className="w-full bg-zinc-800/60 border border-zinc-700/60 rounded-lg px-3 py-2 text-sm mono focus:outline-none focus:ring-1 focus:ring-emerald-500/40 transition-all"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              )}
+            </Panel>
 
-      {/* Active Assets */}
-      <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5 card-glow">
-        <h3 className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium mb-3">
-          Active Assets
-        </h3>
-        <p className="text-zinc-600 text-[11px] mb-3">
-          Select which assets the bot actively trades.
-        </p>
-        {knownAssets.length === 0 ? (
-          <div className="text-zinc-600 text-sm">
-            Add asset definitions above first.
+            <Panel title="Active Assets">
+              <div className="p-4">
+                <p className="text-zinc-400 text-xs mb-4">
+                  Select which assets the bot actively trades.
+                </p>
+                {knownAssets.length === 0 ? (
+                  <div className="text-zinc-500 text-sm">
+                    Add asset definitions above first.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {knownAssets.map((asset) => {
+                      const active = draftAssets.includes(asset);
+                      return (
+                        <button
+                          key={asset}
+                          onClick={() => toggleAsset(asset)}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium font-mono transition-all duration-200 border ${
+                            active
+                              ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/50"
+                              : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500"
+                          }`}
+                        >
+                          {asset}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {draftAssets.length === 0 && knownAssets.length > 0 && (
+                  <p className="text-red-400 text-xs mt-3">
+                    At least one asset must be active.
+                  </p>
+                )}
+              </div>
+            </Panel>
           </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {knownAssets.map((asset) => {
-              const active = draftAssets.includes(asset);
-              return (
-                <button
-                  key={asset}
-                  onClick={() => toggleAsset(asset)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 border ${
-                    active
-                      ? "bg-emerald-500/15 text-emerald-400 border-emerald-700/50 shadow-sm shadow-emerald-500/10"
-                      : "bg-zinc-800/60 text-zinc-500 border-zinc-700/50 hover:text-zinc-300 hover:border-zinc-600"
-                  }`}
-                >
-                  {active && <span className="mr-1">✓</span>}
-                  {asset}
-                </button>
-              );
-            })}
-          </div>
-        )}
-        {draftAssets.length === 0 && knownAssets.length > 0 && (
-          <p className="text-red-400 text-[11px] mt-2">
-            At least one asset must be active
-          </p>
         )}
       </div>
 
       {/* Save Bar */}
-      <div className="sticky bottom-4 z-20">
-        <div className="bg-zinc-900/95 backdrop-blur-sm rounded-xl border border-zinc-800 p-4 flex items-center justify-between shadow-lg shadow-black/20">
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-4xl z-50">
+        <div className="bg-zinc-800/95 backdrop-blur-md rounded-xl border border-zinc-700 p-3 px-5 flex items-center justify-between shadow-2xl">
           <div className="flex items-center gap-3">
             {msg && (
               <span
-                className={`text-xs animate-fade-in ${
+                className={`text-xs font-mono animate-fade-in ${
                   msg.startsWith("Error") ? "text-red-400" : "text-emerald-400"
                 }`}
               >
                 {msg}
               </span>
             )}
+            {!msg && totalChanges > 0 && (
+              <span className="text-xs text-zinc-400 font-mono">
+                {totalChanges} pending change{totalChanges !== 1 ? "s" : ""}
+              </span>
+            )}
+            {!msg && totalChanges === 0 && (
+              <span className="text-xs text-zinc-500 font-mono">
+                All settings saved
+              </span>
+            )}
           </div>
-          <button
+          <Button
             onClick={handleSave}
             disabled={saving || totalChanges === 0 || draftAssets.length === 0}
-            className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-              totalChanges > 0 && draftAssets.length > 0
-                ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-700/50 shadow-sm shadow-emerald-500/10"
-                : "bg-zinc-800 text-zinc-600 cursor-not-allowed border border-zinc-700"
-            }`}
+            variant="primary"
+            className="min-w-[120px]"
           >
-            {saving
-              ? "Saving…"
-              : totalChanges > 0
-                ? `Save ${totalChanges} change${totalChanges !== 1 ? "s" : ""}`
-                : "No changes"}
-          </button>
+            {saving ? "Saving..." : "Save Changes"}
+          </Button>
         </div>
       </div>
     </div>

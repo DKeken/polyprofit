@@ -15,7 +15,8 @@ use anyhow::{Context, Result, bail};
 use redb::{Database, DatabaseError, ReadableTable, ReadableTableMetadata, TableDefinition};
 use tracing::{debug, info, warn};
 
-use crate::types::{RuntimeConfig, TradeLog};
+use crate::models::config::RuntimeConfig;
+use crate::types::TradeLog;
 
 // ── Table definitions ──
 
@@ -369,7 +370,7 @@ mod tests {
 
         assert!(db.load_config().unwrap().is_none());
 
-        let cfg = crate::types::RuntimeConfig::default();
+        let cfg = crate::models::config::RuntimeConfig::default();
         db.save_config(&cfg).unwrap();
 
         let loaded = db.load_config().unwrap().unwrap();

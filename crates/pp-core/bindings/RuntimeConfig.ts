@@ -2,7 +2,7 @@
 import type { AssetMeta } from "./AssetMeta";
 import type { OrderStrategy } from "./OrderStrategy";
 
-export type RuntimeConfig = { min_edge: string, min_prob: string, max_prob: string, max_spread: string, order_strategy: OrderStrategy, market_refresh_secs: number, assets: string[], daily_loss_limit: string, daily_profit_cap: string, max_position_pct: string, max_concurrent: number, drawdown_limit: string, adverse_fill_pause: number, 
+export type RuntimeConfig = { min_edge: string, min_prob: string, max_prob: string, max_spread: string, order_strategy: OrderStrategy, market_refresh_secs: number, assets: string[], daily_loss_limit: string, daily_profit_cap: string, max_position_pct: string, max_concurrent: number, drawdown_limit: string, adverse_fill_pause: number, min_whale_trade_usd: string, min_whale_win_rate: number, min_whale_roi: number, min_whale_profit_usd: string, whale_poll_interval_secs: bigint, 
 /**
  * Full asset definitions (symbol, binance pair, keywords).
  * Managed via frontend Settings UI. Config.toml seeds initial values.

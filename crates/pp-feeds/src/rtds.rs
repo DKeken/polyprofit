@@ -7,7 +7,7 @@ use rust_decimal::Decimal;
 use serde::Deserialize;
 use tracing::{debug, error, info, warn};
 
-use pp_core::{AppState, Asset, PriceState};
+use pp_core::{AppState, Asset};
 
 const RTDS_URL: &str = "wss://ws-live-data.polymarket.com";
 const ZOMBIE_TIMEOUT_SECS: u64 = 30;

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Panel } from "../../shared/ui";
+import { Button, Panel, Input } from "../../shared/ui";
 import { api } from "../../api";
 
 export default function ConnectPage() {
@@ -58,12 +58,12 @@ export default function ConnectPage() {
                 <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-500 mb-1.5">
                   EVM Private Key
                 </label>
-                <input
+                <Input
                   type="password"
                   value={privKey}
                   onChange={(e) => setPrivKey(e.target.value)}
                   placeholder="0x..."
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono text-zinc-200 placeholder-zinc-700 outline-none focus:border-emerald-500/50 transition-colors"
+                  
                 />
                 <p className="text-[10px] text-zinc-600 font-mono mt-1.5">
                   Used for EIP-712 order signing. Never sent to Polymarket
@@ -71,7 +71,7 @@ export default function ConnectPage() {
                 </p>
               </div>
 
-              <div className="pt-4 border-t border-zinc-800/50">
+              <div className="pt-4 border-t border-zinc-700/50">
                 <h3 className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-4">
                   CLOB API Credentials (Optional)
                 </h3>
@@ -81,33 +81,33 @@ export default function ConnectPage() {
                     <label className="block text-[10px] font-mono text-zinc-500 mb-1">
                       API Key
                     </label>
-                    <input
+                    <Input
                       type="text"
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-zinc-200 outline-none focus:border-emerald-500/50 transition-colors"
+                      
                     />
                   </div>
                   <div>
                     <label className="block text-[10px] font-mono text-zinc-500 mb-1">
                       API Secret
                     </label>
-                    <input
+                    <Input
                       type="password"
                       value={apiSecret}
                       onChange={(e) => setApiSecret(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-zinc-200 outline-none focus:border-emerald-500/50 transition-colors"
+                      
                     />
                   </div>
                   <div>
                     <label className="block text-[10px] font-mono text-zinc-500 mb-1">
                       Passphrase
                     </label>
-                    <input
+                    <Input
                       type="password"
                       value={passphrase}
                       onChange={(e) => setPassphrase(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-zinc-200 outline-none focus:border-emerald-500/50 transition-colors"
+                      
                     />
                   </div>
                 </div>

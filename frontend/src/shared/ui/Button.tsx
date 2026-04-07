@@ -22,12 +22,15 @@ export function Button({
     base +=
       " bg-emerald-500/20 text-emerald-400 border-emerald-700/50 hover:bg-emerald-500/30";
   } else if (variant === "danger") {
-    base += " bg-red-950/40 text-red-400 border-red-900/50 hover:bg-red-900/40 hover:text-red-300 hover:border-red-700/50 shadow-[0_0_10px_rgba(248,113,113,0.1)] hover:shadow-[0_0_15px_rgba(248,113,113,0.2)]";
+    base +=
+      " bg-red-950/40 text-red-400 border-red-900/50 hover:bg-red-900/40 hover:text-red-300 hover:border-red-700/50 shadow-[0_0_10px_rgba(248,113,113,0.1)] hover:shadow-[0_0_15px_rgba(248,113,113,0.2)]";
   } else if (variant === "ghost") {
-    base += " border-transparent text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50";
+    base +=
+      " border-transparent text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50";
   } else {
     // secondary
-    base += " bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500";
+    base +=
+      " bg-zinc-800 border-zinc-600 text-zinc-300 hover:text-zinc-100 hover:border-zinc-500 hover:bg-zinc-700";
   }
 
   return <button className={`${base} ${className}`} {...props} />;

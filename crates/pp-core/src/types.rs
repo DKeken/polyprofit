@@ -1,227 +1,15 @@
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64};
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
-use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
-use ts_rs::TS;
 
-// ── Newtypes for type safety ──
+// Re-export all domain model types so downstream code can use `pp_core::Asset` etc.
+pub use crate::models::*;
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
-pub struct TokenId(pub String);
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ConditionId(pub String);
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub struct Price(#[ts(as = "String")] pub Decimal);
-
-impl Price {
-    pub fn new(val: Decimal) -> Self {
-        Self(val)
-    }
-
-    pub fn as_decimal(&self) -> Decimal {
-        self.0
-    }
-}
-
-// ── Asset & AssetMeta — fully data-driven ──
-
-/// A crypto asset identifier. Stored as uppercase string (e.g. "BTC", "ETH", "DOGE").
-/// Not an enum — new assets are added via config, not code changes.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Asset(pub String);
-
-impl Asset {
-    pub fn new(symbol: &str) -> Self {
-        Self(symbol.to_uppercase())
-    }
-}
-
-impl std::fmt::Display for Asset {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl std::str::FromStr for Asset {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let upper = s.trim().to_uppercase();
-        if upper.is_empty() {
-            return Err("Asset name cannot be empty".to_string());
-        }
-        Ok(Asset(upper))
-    }
-}
-
-/// Metadata for a configured asset — managed via frontend Settings UI.
-/// Stored in RuntimeConfig → persisted in redb.
-/// Config.toml [[asset_definitions]] serves as initial seed only.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub struct AssetMeta {
-    /// Display symbol (e.g. "BTC")
-    pub symbol: String,
-    /// Binance trading pair (e.g. "BTCUSDT") — used for RTDS subscription
-    pub binance_symbol: String,
-    /// Lowercase keywords for market question matching (e.g. ["btc", "bitcoin"])
-    pub keywords: Vec<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub enum MarketKind {
-    UpDown,
-    FiveMin,
-    Above,
-    Below,
-    Dip,
-    Reach,
-    Range,
-    Unknown,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Market {
-    pub condition_id: ConditionId,
-    pub token_yes: TokenId,
-    pub token_no: TokenId,
-    pub asset: Asset,
-    pub kind: MarketKind,
-    pub question: String,
-    pub strike: Option<Decimal>,
-    pub end_time: DateTime<Utc>,
-    pub active: bool,
-}
-
-// ── Price state ──
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PriceState {
-    pub binance: Decimal,
-    pub chainlink: Decimal,
-    pub binance_ts: i64,
-    pub chainlink_ts: i64,
-}
-
-impl Default for PriceState {
-    fn default() -> Self {
-        Self {
-            binance: Decimal::ZERO,
-            chainlink: Decimal::ZERO,
-            binance_ts: 0,
-            chainlink_ts: 0,
-        }
-    }
-}
-
-// ── Orderbook ──
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Orderbook {
-    pub best_bid: Decimal,
-    pub best_ask: Decimal,
-    pub bid_depth: Decimal,
-    pub ask_depth: Decimal,
-    pub updated_at: DateTime<Utc>,
-}
-
-impl Default for Orderbook {
-    fn default() -> Self {
-        Self {
-            best_bid: Decimal::ZERO,
-            best_ask: Decimal::ONE,
-            bid_depth: Decimal::ZERO,
-            ask_depth: Decimal::ZERO,
-            updated_at: Utc::now(),
-        }
-    }
-}
-
-// ── Signal ──
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub enum Side {
-    Yes,
-    No,
-}
-
-impl std::fmt::Display for Side {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Side::Yes => write!(f, "YES"),
-            Side::No => write!(f, "NO"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Signal {
-    pub condition_id: ConditionId,
-    pub side: Side,
-    pub fair: Decimal,
-    pub market_price: Decimal,
-    pub edge: Decimal,
-    pub size_usdc: Decimal,
-    pub timestamp: DateTime<Utc>,
-}
-
-// ── Order strategy ──
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub enum OrderStrategy {
-    Passive,
-    Balanced,
-    Aggressive,
-}
-
-// ── Position ──
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Position {
-    pub condition_id: ConditionId,
-    pub token_id: TokenId,
-    pub side: Side,
-    pub size: Decimal,
-    pub entry_price: Decimal,
-    pub opened_at: DateTime<Utc>,
-}
-
-// ── Maker order tracking ──
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MakerOrder {
-    pub order_id: String,
-    pub condition_id: ConditionId,
-    pub token_id: TokenId,
-    pub side: Side,
-    pub price: Decimal,
-    pub size: Decimal,
-    pub placed_at: DateTime<Utc>,
-}
-
-// ── Trade log ──
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TradeLog {
-    pub condition_id: ConditionId,
-    pub side: Side,
-    pub price: Decimal,
-    pub size: Decimal,
-    pub pnl: Option<Decimal>,
-    pub is_adverse: bool,
-    pub timestamp: DateTime<Utc>,
-}
+use crate::db::BotDb;
 
 // ── Metrics ──
 
@@ -236,66 +24,6 @@ pub struct Metrics {
     pub slow_cancel_replace: AtomicU64,
     pub heartbeat_failures: AtomicU64,
 }
-
-// ── Runtime Config (hot-reloadable via API) ──
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub struct RuntimeConfig {
-    // Strategy
-    #[ts(as = "String")]
-    pub min_edge: Decimal,
-    #[ts(as = "String")]
-    pub min_prob: Decimal,
-    #[ts(as = "String")]
-    pub max_prob: Decimal,
-    #[ts(as = "String")]
-    pub max_spread: Decimal,
-    pub order_strategy: OrderStrategy,
-    #[ts(type = "number")]
-    pub market_refresh_secs: u64,
-    #[ts(type = "string[]")]
-    pub assets: Vec<Asset>,
-    // Risk
-    #[ts(as = "String")]
-    pub daily_loss_limit: Decimal,
-    #[ts(as = "String")]
-    pub daily_profit_cap: Decimal,
-    #[ts(as = "String")]
-    pub max_position_pct: Decimal,
-    pub max_concurrent: usize,
-    #[ts(as = "String")]
-    pub drawdown_limit: Decimal,
-    pub adverse_fill_pause: u32,
-    /// Full asset definitions (symbol, binance pair, keywords).
-    /// Managed via frontend Settings UI. Config.toml seeds initial values.
-    /// Changes here rebuild the asset_registry and take effect immediately.
-    pub asset_definitions: Vec<AssetMeta>,
-}
-
-impl Default for RuntimeConfig {
-    fn default() -> Self {
-        use rust_decimal_macros::dec;
-        Self {
-            min_edge: dec!(0.05),
-            min_prob: dec!(0.15),
-            max_prob: dec!(0.85),
-            max_spread: dec!(0.06),
-            order_strategy: OrderStrategy::Passive,
-            market_refresh_secs: 60,
-            assets: vec![],
-            daily_loss_limit: dec!(-100),
-            daily_profit_cap: dec!(100000),
-            max_position_pct: dec!(0.05),
-            max_concurrent: 50,
-            drawdown_limit: dec!(0.20),
-            adverse_fill_pause: 3,
-            asset_definitions: vec![],
-        }
-    }
-}
-
-use crate::db::BotDb;
 
 // ── Shared App State ──
 
@@ -322,9 +50,10 @@ pub struct AppState {
     /// Cancellation token for graceful shutdown.
     /// All async loops check this token and exit cleanly when cancelled.
     pub shutdown: CancellationToken,
+    pub cancel_queue: DashMap<String, ()>,
     pub whales: DashMap<String, WhaleProfile>,
     pub recent_whale_activity: parking_lot::RwLock<Vec<WhaleActivity>>,
-    pub whale_job_queue: tokio::sync::OnceCell<std::sync::Arc<crate::jobs::queue::JobQueue<crate::jobs::queue::DynJob>>>,
+    pub whale_job_queue: tokio::sync::OnceCell<std::sync::Arc<crate::jobs::JobQueue<crate::jobs::DynJob>>>,
 }
 
 impl AppState {
@@ -347,6 +76,10 @@ impl AppState {
             db: None,
             asset_registry: DashMap::new(),
             shutdown: CancellationToken::new(),
+            cancel_queue: DashMap::new(),
+            whales: DashMap::new(),
+            recent_whale_activity: parking_lot::RwLock::new(Vec::new()),
+            whale_job_queue: tokio::sync::OnceCell::new(),
         })
     }
 
@@ -370,6 +103,10 @@ impl AppState {
             db: Some(db),
             asset_registry: DashMap::new(),
             shutdown: CancellationToken::new(),
+            cancel_queue: DashMap::new(),
+            whales: DashMap::new(),
+            recent_whale_activity: parking_lot::RwLock::new(Vec::new()),
+            whale_job_queue: tokio::sync::OnceCell::new(),
         })
     }
 
@@ -423,9 +160,20 @@ impl AppState {
         }
     }
 
+    /// Record a whale activity event. Keeps the most recent 500 entries.
+    pub fn record_whale_activity(&self, activity: WhaleActivity) {
+        const MAX_ENTRIES: usize = 500;
+        let mut activities = self.recent_whale_activity.write();
+        activities.push(activity);
+        let len = activities.len();
+        if len > MAX_ENTRIES {
+            activities.drain(..len - MAX_ENTRIES);
+        }
+    }
+
     /// Populate asset registry from config definitions.
     /// Called once at startup after AppState is created.
-    pub fn load_asset_registry(&self, defs: &[crate::config::AssetDef]) {
+    pub fn load_asset_registry(&self, defs: &[AssetDef]) {
         self.asset_registry.clear();
         for def in defs {
             let asset = Asset::new(&def.symbol);
@@ -502,6 +250,10 @@ impl Default for AppState {
             db: None,
             asset_registry: DashMap::new(),
             shutdown: CancellationToken::new(),
+            cancel_queue: DashMap::new(),
+            whales: DashMap::new(),
+            recent_whale_activity: parking_lot::RwLock::new(Vec::new()),
+            whale_job_queue: tokio::sync::OnceCell::new(),
         }
     }
 }

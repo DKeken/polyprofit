@@ -1,10 +1,12 @@
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-use crate::models::market::{Asset, ConditionId, Price, TokenId};
+use crate::models::market::{ConditionId, TokenId};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub enum Side {
     Yes,
     No,
@@ -63,7 +65,7 @@ pub struct TradeLog {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, ts_rs::TS)]
-#[ts_rs::export]
+#[ts(export)]
 pub enum OrderStrategy {
     Passive,
     #[default]

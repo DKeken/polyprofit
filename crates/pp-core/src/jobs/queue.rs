@@ -62,7 +62,7 @@ pub trait JobHandler: Send + Sync + 'static {
 #[derive(Debug)]
 pub struct JobQueue<H: JobHandler> {
     sender: mpsc::Sender<H::Payload>,
-    workers: Vec<JoinHandle<()>>,
+    _workers: Vec<JoinHandle<()>>,
 }
 
 impl<H: JobHandler> JobQueue<H> {
@@ -74,7 +74,7 @@ impl<H: JobHandler> JobQueue<H> {
         options: JobOptions,
         shutdown: tokio_util::sync::CancellationToken,
     ) -> Self {
-        let (sender, mut receiver) = mpsc::channel::<H::Payload>(queue_capacity);
+        let (sender, receiver) = mpsc::channel::<H::Payload>(queue_capacity);
         let mut workers = Vec::with_capacity(concurrency);
 
         info!(
@@ -122,7 +122,7 @@ impl<H: JobHandler> JobQueue<H> {
             workers.push(worker);
         }
 
-        Self { sender, workers }
+        Self { sender, _workers: workers }
     }
 
     /// Submit a new job to the queue.

@@ -25,7 +25,6 @@ use serde::Deserialize;
 use tracing::{debug, info, warn};
 
 use pp_core::{AppState, WhaleActivity, WhaleProfile};
-use pp_core::models::whale::{WhaleActivity as ModelWhaleActivity, WhaleProfile as ModelWhaleProfile};
 
 // ── Configuration constants ─────────────────────────────────────────────────
 

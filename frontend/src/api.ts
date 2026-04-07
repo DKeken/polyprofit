@@ -122,7 +122,9 @@ export interface TradesExportResponse {
 
 const BASE = "";
 
-async function parseJsonResponse<T>(res: Response): Promise<T | ConfigErrorResponse | null> {
+async function parseJsonResponse<T>(
+  res: Response,
+): Promise<T | ConfigErrorResponse | null> {
   try {
     return (await res.json()) as T | ConfigErrorResponse;
   } catch {
@@ -145,7 +147,10 @@ async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
   const payload = await parseJsonResponse<T>(res);
   if (!res.ok) {
-    throw new ApiError(responseErrorMessage("GET", path, res.status, payload), res.status);
+    throw new ApiError(
+      responseErrorMessage("GET", path, res.status, payload),
+      res.status,
+    );
   }
   return payload as T;
 }
@@ -154,7 +159,26 @@ async function post<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { method: "POST" });
   const payload = await parseJsonResponse<T>(res);
   if (!res.ok) {
-    throw new ApiError(responseErrorMessage("POST", path, res.status, payload), res.status);
+    throw new ApiError(
+      responseErrorMessage("POST", path, res.status, payload),
+      res.status,
+    );
+  }
+  return payload as T;
+}
+
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await parseJsonResponse<T>(res);
+  if (!res.ok) {
+    throw new ApiError(
+      responseErrorMessage("POST", path, res.status, payload),
+      res.status,
+    );
   }
   return payload as T;
 }
@@ -168,7 +192,10 @@ async function put<T>(path: string, body: unknown): Promise<T> {
 
   const payload = await parseJsonResponse<T>(res);
   if (!res.ok) {
-    throw new ApiError(responseErrorMessage("PUT", path, res.status, payload), res.status);
+    throw new ApiError(
+      responseErrorMessage("PUT", path, res.status, payload),
+      res.status,
+    );
   }
 
   return payload as T;
@@ -208,4 +235,12 @@ export const api = {
   /** Export trades as CSV download */
   exportTradesCsv: () =>
     fetch(`${BASE}/api/trades/export`).then((r) => r.text()),
+
+  /** Save Polymarket credentials — triggers backend restart */
+  setCredentials: (creds: {
+    private_key: string;
+    api_key: string;
+    api_secret: string;
+    api_passphrase: string;
+  }) => postJson<{ success: boolean; message: string }>("/api/auth", creds),
 } as const;

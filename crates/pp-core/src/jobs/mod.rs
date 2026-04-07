@@ -1,3 +1,3 @@
 pub mod queue;
 
-pub use queue::{JobError, JobHandler, JobOptions, JobQueue, JobResult};
+pub use queue::{JobError, JobHandler, JobOptions, JobQueue, JobResult, DynJob};

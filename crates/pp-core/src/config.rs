@@ -1,56 +1,10 @@
 use rust_decimal::Decimal;
-use serde::Deserialize;
 
-use crate::types::{OrderStrategy, RuntimeConfig, Asset};
+use crate::models::market::{Asset, AssetMeta};
+use crate::models::config::RuntimeConfig;
 
-/// Asset definition from config.toml [[asset_definitions]].
-/// Defines a crypto asset with its Binance symbol and keyword matching rules.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AssetDef {
-    pub symbol: String,
-    pub binance_symbol: String,
-    pub keywords: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    pub chain_id: u64,
-    pub strategy: StrategyConfig,
-    pub risk: RiskConfig,
-    pub server: ServerConfig,
-    /// Asset definitions — each maps a symbol to Binance pair + discovery keywords.
-    #[serde(default)]
-    pub asset_definitions: Vec<AssetDef>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct StrategyConfig {
-    pub min_edge: Decimal,
-    pub min_prob: Decimal,
-    pub max_prob: Decimal,
-    pub max_spread: Decimal,
-    pub order_strategy: OrderStrategy,
-    pub market_refresh_secs: u64,
-    /// Active asset symbols (e.g. ["BTC", "ETH"]). Must be a subset of asset_definitions.
-    pub assets: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct RiskConfig {
-    pub daily_loss_limit: Decimal,
-    pub daily_profit_cap: Decimal,
-    pub max_position_pct: Decimal,
-    pub max_concurrent: usize,
-    pub drawdown_limit: Decimal,
-    pub adverse_fill_pause: u32,
-    pub starting_balance: Decimal,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ServerConfig {
-    pub port: u16,
-    pub frontend_dist: String,
-}
+// Re-export config structs for backward compatibility (pp_core::config::StrategyConfig etc.)
+pub use crate::models::config::{Config, StrategyConfig, RiskConfig, ServerConfig, WhalesConfig, AssetDef};
 
 impl Config {
     pub fn load(path: &str) -> anyhow::Result<Self> {
@@ -141,8 +95,6 @@ impl Config {
 
     /// Create a RuntimeConfig snapshot from the initial static config
     pub fn to_runtime_config(&self) -> RuntimeConfig {
-        use crate::types::AssetMeta;
-
         RuntimeConfig {
             min_edge: self.strategy.min_edge,
             min_prob: self.strategy.min_prob,
@@ -157,6 +109,11 @@ impl Config {
             max_concurrent: self.risk.max_concurrent,
             drawdown_limit: self.risk.drawdown_limit,
             adverse_fill_pause: self.risk.adverse_fill_pause,
+            min_whale_trade_usd: self.whales.min_trade_usd,
+            min_whale_win_rate: self.whales.min_win_rate,
+            min_whale_roi: self.whales.min_roi,
+            min_whale_profit_usd: self.whales.min_profit_usd,
+            whale_poll_interval_secs: self.whales.poll_interval_secs,
             asset_definitions: self.asset_definitions.iter().map(|d| AssetMeta {
                 symbol: d.symbol.to_uppercase(),
                 binance_symbol: d.binance_symbol.clone(),
@@ -170,6 +127,7 @@ impl Config {
 mod tests {
     use super::*;
     use rust_decimal_macros::dec;
+    use crate::models::trade::OrderStrategy;
 
     /// Helper: build a valid Config for mutation-based testing.
     fn valid_config() -> Config {
@@ -196,6 +154,13 @@ mod tests {
             server: ServerConfig {
                 port: 3000,
                 frontend_dist: "./dist".into(),
+            },
+            whales: WhalesConfig {
+                min_trade_usd: dec!(200),
+                min_win_rate: 0.55,
+                min_roi: 0.15,
+                min_profit_usd: dec!(500),
+                poll_interval_secs: 300,
             },
             asset_definitions: vec![
                 AssetDef {
@@ -249,7 +214,7 @@ mod tests {
     #[test]
     fn prob_out_of_bounds_fails() {
         let mut cfg = valid_config();
-        cfg.strategy.min_prob = dec!(0.005); // below 0.01
+        cfg.strategy.min_prob = dec!(0.005);
         let err = cfg.validate().unwrap_err();
         assert!(err.to_string().contains("prob bounds"));
     }
@@ -391,5 +356,10 @@ mod tests {
         assert_eq!(rc.max_concurrent, cfg.risk.max_concurrent);
         assert_eq!(rc.drawdown_limit, cfg.risk.drawdown_limit);
         assert_eq!(rc.adverse_fill_pause, cfg.risk.adverse_fill_pause);
+        assert_eq!(rc.min_whale_trade_usd, cfg.whales.min_trade_usd);
+        assert_eq!(rc.min_whale_win_rate, cfg.whales.min_win_rate);
+        assert_eq!(rc.min_whale_roi, cfg.whales.min_roi);
+        assert_eq!(rc.min_whale_profit_usd, cfg.whales.min_profit_usd);
+        assert_eq!(rc.whale_poll_interval_secs, cfg.whales.poll_interval_secs);
     }
 }

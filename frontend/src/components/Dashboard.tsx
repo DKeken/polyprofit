@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useBot } from "../hooks/useBot";
-import HeaderBar from "./HeaderBar";
 import EquityCurve from "./EquityCurve";
 import ExecutionLog from "./ExecutionLog";
 import TradeFeed from "./TradeFeed";
@@ -9,18 +8,17 @@ import Settings from "./Settings";
 /* ── Main Dashboard ── */
 
 export default function Dashboard() {
-  const { tick, connected, pnlHistory, logEntries, pause, resume, kill, updateConfig } =
-    useBot();
+  const { tick, connected, pnlHistory, logEntries, updateConfig } = useBot();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Settings overlay — accessible via long-press on title or keyboard shortcut
   if (settingsOpen) {
     return (
-      <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <div className="min-h-screen text-zinc-100">
         <div className="max-w-[1200px] mx-auto p-4 md:p-6">
           <button
             onClick={() => setSettingsOpen(false)}
-            className="mb-4 px-3 py-1.5 text-xs font-mono text-zinc-400 hover:text-zinc-200 bg-zinc-900 border border-zinc-800 rounded-lg transition-colors"
+            className="mb-4 px-3 py-1.5 text-xs font-mono text-zinc-400 hover:text-zinc-200 bg-zinc-800 border border-zinc-700 rounded-lg transition-colors"
           >
             &larr; Back to Dashboard
           </button>
@@ -35,22 +33,11 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="h-screen bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden">
-      {/* ── Header ── */}
-      <HeaderBar
-        tick={tick}
-        connected={connected}
-        paused={tick.paused}
-        onPause={pause}
-        onResume={resume}
-        onKill={kill}
-        onSettings={() => setSettingsOpen(true)}
-      />
-
+    <div className="h-screen text-zinc-100 flex flex-col overflow-hidden">
       {/* ── Two-column layout ── */}
       <div className="flex-1 flex min-h-0">
         {/* ── Left: Trade Feed ── */}
-        <div className="w-[480px] shrink-0 border-r border-zinc-800/60 flex flex-col min-h-0">
+        <div className="w-[480px] shrink-0 border-r border-zinc-700/60 flex flex-col min-h-0">
           <TradeFeed
             trades={tick.trades}
             positions={tick.open_positions}
@@ -93,18 +80,25 @@ function MetricsStrip({ tick }: { tick: ReturnType<typeof useBot>["tick"] }) {
   const winRate = (tick.win_rate * 100).toFixed(1);
 
   return (
-    <div className="border-b border-zinc-800/60 px-5 py-3 flex items-end gap-8">
+    <div className="border-b border-zinc-700/60 px-5 py-3 flex items-end gap-8">
       {/* Balance */}
       <div>
         <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 mb-0.5">
           Balance
         </div>
         <div className="text-2xl font-bold font-mono text-zinc-100">
-          ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          $
+          {balance.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
         </div>
         {pnl !== 0 && (
-          <div className={`text-[10px] font-mono ${pnl >= 0 ? "text-emerald-500/70" : "text-red-400/70"}`}>
-            {pnl >= 0 ? "+" : ""}{pnl.toFixed(2)}
+          <div
+            className={`text-[10px] font-mono ${pnl >= 0 ? "text-emerald-500/70" : "text-red-400/70"}`}
+          >
+            {pnl >= 0 ? "+" : ""}
+            {pnl.toFixed(2)}
           </div>
         )}
       </div>
@@ -114,10 +108,18 @@ function MetricsStrip({ tick }: { tick: ReturnType<typeof useBot>["tick"] }) {
         <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 mb-0.5">
           Total P&L
         </div>
-        <div className={`text-2xl font-bold font-mono ${pnl >= 0 ? "text-profit" : "text-loss"}`}>
-          {pnl >= 0 ? "+" : ""}${Math.abs(pnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        <div
+          className={`text-2xl font-bold font-mono ${pnl >= 0 ? "text-profit" : "text-loss"}`}
+        >
+          {pnl >= 0 ? "+" : ""}$
+          {Math.abs(pnl).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
         </div>
-        <div className={`text-[10px] font-mono ${dailyPnl >= 0 ? "text-emerald-500/70" : "text-red-400/70"}`}>
+        <div
+          className={`text-[10px] font-mono ${dailyPnl >= 0 ? "text-emerald-500/70" : "text-red-400/70"}`}
+        >
           {dailyPnl >= 0 ? "+" : ""}${dailyPnl.toFixed(2)}
         </div>
       </div>
@@ -140,8 +142,14 @@ function MetricsStrip({ tick }: { tick: ReturnType<typeof useBot>["tick"] }) {
         <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 mb-0.5">
           Daily P&L
         </div>
-        <div className={`text-2xl font-bold font-mono ${dailyPnl >= 0 ? "text-profit" : "text-loss"}`}>
-          {dailyPnl >= 0 ? "+" : ""}${Math.abs(dailyPnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        <div
+          className={`text-2xl font-bold font-mono ${dailyPnl >= 0 ? "text-profit" : "text-loss"}`}
+        >
+          {dailyPnl >= 0 ? "+" : ""}$
+          {Math.abs(dailyPnl).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
         </div>
       </div>
 
@@ -150,9 +158,15 @@ function MetricsStrip({ tick }: { tick: ReturnType<typeof useBot>["tick"] }) {
         <div className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 mb-0.5">
           Win Rate
         </div>
-        <div className={`text-2xl font-bold font-mono ${
-          tick.win_rate >= 0.6 ? "text-profit" : tick.win_rate >= 0.4 ? "text-amber" : "text-loss"
-        }`}>
+        <div
+          className={`text-2xl font-bold font-mono ${
+            tick.win_rate >= 0.6
+              ? "text-profit"
+              : tick.win_rate >= 0.4
+                ? "text-amber"
+                : "text-loss"
+          }`}
+        >
           {winRate}%
         </div>
         <div className="text-[10px] font-mono text-zinc-500">
@@ -182,7 +196,7 @@ function SubMetrics({ tick }: { tick: ReturnType<typeof useBot>["tick"] }) {
   ].filter(Boolean);
 
   return (
-    <div className="border-b border-zinc-800/40 px-5 py-1.5 flex items-center gap-3 text-[10px] font-mono text-zinc-500 overflow-x-auto">
+    <div className="border-b border-zinc-700/40 px-5 py-1.5 flex items-center gap-3 text-[10px] font-mono text-zinc-500 overflow-x-auto">
       {items.map((item, i) => (
         <span key={i} className="whitespace-nowrap flex items-center gap-2">
           {i > 0 && <span className="text-zinc-700">|</span>}

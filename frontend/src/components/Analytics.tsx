@@ -35,7 +35,7 @@ function StatCard({
   large?: boolean;
 }) {
   return (
-    <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 card-glow animate-fade-in">
+    <div className="bg-zinc-800 rounded-xl border border-zinc-700 p-4 card-glow animate-fade-in">
       <div className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium mb-2">
         {label}
       </div>
@@ -53,13 +53,7 @@ function StatCard({
 
 /* ── Asset Breakdown Row ── */
 
-function AssetRow({
-  asset,
-  stats,
-}: {
-  asset: string;
-  stats: AssetStats;
-}) {
+function AssetRow({ asset, stats }: { asset: string; stats: AssetStats }) {
   const pnl = parseFloat(stats.total_pnl);
   const wr =
     stats.wins + stats.losses > 0
@@ -67,7 +61,7 @@ function AssetRow({
       : "—";
 
   return (
-    <tr className="border-b border-zinc-800/50 text-sm hover:bg-zinc-800/30 transition-colors">
+    <tr className="border-b border-zinc-700/50 text-sm hover:bg-zinc-800/30 transition-colors">
       <td className="py-3 pr-4">
         <span className="font-medium text-zinc-200">{asset}</span>
       </td>
@@ -75,7 +69,9 @@ function AssetRow({
       <td className="py-3 pr-4 mono text-emerald-400">{stats.wins}</td>
       <td className="py-3 pr-4 mono text-red-400">{stats.losses}</td>
       <td className="py-3 pr-4 mono text-zinc-300">{wr}%</td>
-      <td className={`py-3 mono ${pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+      <td
+        className={`py-3 mono ${pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}
+      >
         {formatPnl(stats.total_pnl)}
       </td>
     </tr>
@@ -114,7 +110,14 @@ function WinLossRing({
   return (
     <div className="flex items-center justify-center gap-6">
       <svg width="100" height="100" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r={r} fill="none" stroke="#27272a" strokeWidth="8" />
+        <circle
+          cx="50"
+          cy="50"
+          r={r}
+          fill="none"
+          stroke="#27272a"
+          strokeWidth="8"
+        />
         <circle
           cx="50"
           cy="50"
@@ -150,13 +153,7 @@ function WinLossRing({
         >
           {total}
         </text>
-        <text
-          x="50"
-          y="60"
-          textAnchor="middle"
-          fill="#71717a"
-          fontSize="9"
-        >
+        <text x="50" y="60" textAnchor="middle" fill="#71717a" fontSize="9">
           trades
         </text>
       </svg>
@@ -216,7 +213,7 @@ export default function Analytics() {
           {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
-              className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 h-24 shimmer"
+              className="bg-zinc-800 rounded-xl border border-zinc-700 p-4 h-24 shimmer"
             />
           ))}
         </div>
@@ -226,7 +223,7 @@ export default function Analytics() {
 
   if (error) {
     return (
-      <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-8 text-center animate-fade-in">
+      <div className="bg-zinc-800 rounded-xl border border-zinc-700 p-8 text-center animate-fade-in">
         <div className="text-red-400 text-sm mb-2">{error}</div>
         <button
           onClick={fetchData}
@@ -260,7 +257,7 @@ export default function Analytics() {
   };
 
   return (
-    <div className="space-y-4 animate-slide-up">
+    <div className="space-y-4 animate-slide-up p-4">
       {/* ── Hero Stats ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard
@@ -273,19 +270,21 @@ export default function Analytics() {
           label="Win Rate"
           value={`${(data.win_rate * 100).toFixed(1)}%`}
           sub={`${data.winning_trades}W / ${data.losing_trades}L`}
-          color={
-            data.win_rate >= 0.5 ? "text-emerald-400" : "text-red-400"
-          }
+          color={data.win_rate >= 0.5 ? "text-emerald-400" : "text-red-400"}
           large
         />
         <StatCard
           label="Profit Factor"
           value={
-            data.profit_factor !== null
-              ? data.profit_factor.toFixed(2)
-              : "—"
+            data.profit_factor !== null ? data.profit_factor.toFixed(2) : "—"
           }
-          sub={data.profit_factor !== null && data.profit_factor >= 1.0 ? "Profitable" : data.profit_factor !== null ? "Losing" : undefined}
+          sub={
+            data.profit_factor !== null && data.profit_factor >= 1.0
+              ? "Profitable"
+              : data.profit_factor !== null
+                ? "Losing"
+                : undefined
+          }
           color={
             data.profit_factor !== null && data.profit_factor >= 1.0
               ? "text-emerald-400"
@@ -298,7 +297,11 @@ export default function Analytics() {
         <StatCard
           label="Total Trades"
           value={String(data.total_trades)}
-          sub={data.pending_trades > 0 ? `${data.pending_trades} pending` : undefined}
+          sub={
+            data.pending_trades > 0
+              ? `${data.pending_trades} pending`
+              : undefined
+          }
           large
         />
       </div>
@@ -330,7 +333,7 @@ export default function Analytics() {
       {/* ── Win/Loss Ring + By-Asset Table ── */}
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
         {/* Ring chart */}
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 card-glow">
+        <div className="bg-zinc-800 rounded-xl border border-zinc-700 p-4 card-glow">
           <h3 className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium mb-4">
             Trade Distribution
           </h3>
@@ -342,7 +345,7 @@ export default function Analytics() {
         </div>
 
         {/* By-asset table */}
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 card-glow">
+        <div className="bg-zinc-800 rounded-xl border border-zinc-700 p-4 card-glow">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">
               Performance by Asset
@@ -363,7 +366,7 @@ export default function Analytics() {
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="text-[11px] text-zinc-500 uppercase border-b border-zinc-800">
+                  <tr className="text-[11px] text-zinc-500 uppercase border-b border-zinc-700">
                     <th className="pb-2 pr-4">Asset</th>
                     <th className="pb-2 pr-4">Trades</th>
                     <th className="pb-2 pr-4">Wins</th>

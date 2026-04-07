@@ -10,9 +10,12 @@
 
 body {
   margin: 0;
-  background: #09090b;
+  background: #18181b;
   color: #f4f4f5;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -40,7 +43,9 @@ body {
 
 /* ── Card glow on hover ── */
 .card-glow {
-  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+  transition:
+    box-shadow 0.3s ease,
+    border-color 0.3s ease;
 }
 .card-glow:hover {
   box-shadow: 0 0 20px -4px rgba(52, 211, 153, 0.08);
@@ -65,8 +70,13 @@ body {
 
 /* ── Pulse animation for live dots ── */
 @keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 .animate-pulse-dot {
   animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
@@ -74,8 +84,14 @@ body {
 
 /* ── Fade in animation ── */
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .animate-fade-in {
   animation: fade-in 0.3s ease-out;
@@ -83,8 +99,14 @@ body {
 
 /* ── Slide up animation ── */
 @keyframes slide-up {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .animate-slide-up {
   animation: slide-up 0.4s ease-out;
@@ -92,12 +114,24 @@ body {
 
 /* ── Toast notification ── */
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(-12px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 @keyframes toast-out {
-  from { opacity: 1; transform: translateY(0) scale(1); }
-  to { opacity: 0; transform: translateY(-8px) scale(0.96); }
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
 }
 .toast-enter {
   animation: toast-in 0.25s ease-out forwards;
@@ -108,8 +142,12 @@ body {
 
 /* ── Shimmer loading ── */
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 .shimmer {
   background: linear-gradient(90deg, #27272a 25%, #3f3f46 50%, #27272a 75%);
@@ -119,8 +157,12 @@ body {
 
 /* ── Number change highlight ── */
 @keyframes number-flash {
-  0% { color: #fbbf24; }
-  100% { color: inherit; }
+  0% {
+    color: #fbbf24;
+  }
+  100% {
+    color: inherit;
+  }
 }
 .number-flash {
   animation: number-flash 0.6s ease-out;
@@ -142,11 +184,21 @@ body {
 }
 
 /* ── Execution log type colors ── */
-.log-eval { color: #22d3ee; }
-.log-exec { color: #34d399; }
-.log-fill { color: #fbbf24; }
-.log-err  { color: #f87171; }
-.log-sys  { color: #a78bfa; }
+.log-eval {
+  color: #22d3ee;
+}
+.log-exec {
+  color: #34d399;
+}
+.log-fill {
+  color: #fbbf24;
+}
+.log-err {
+  color: #f87171;
+}
+.log-sys {
+  color: #a78bfa;
+}
 
 /* ── Large metric card ── */
 .metric-card {
@@ -170,8 +222,12 @@ body {
 
 /* ── Terminal scanline effect ── */
 @keyframes scanline {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(100vh); }
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
 }
 .terminal-bg {
   position: relative;
@@ -183,7 +239,12 @@ body {
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(to right, transparent, rgba(52, 211, 153, 0.04), transparent);
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(52, 211, 153, 0.04),
+    transparent
+  );
   animation: scanline 8s linear infinite;
   pointer-events: none;
   z-index: 1;
@@ -196,8 +257,13 @@ body {
 
 /* ── Value update flash ── */
 @keyframes value-update {
-  0% { transform: scale(1.03); color: #fbbf24; }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1.03);
+    color: #fbbf24;
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 .value-updated {
   animation: value-update 0.4s ease-out;
@@ -205,8 +271,13 @@ body {
 
 /* ── Live indicator glow ── */
 @keyframes live-glow {
-  0%, 100% { text-shadow: 0 0 4px rgba(52, 211, 153, 0.6); }
-  50% { text-shadow: 0 0 12px rgba(52, 211, 153, 0.9); }
+  0%,
+  100% {
+    text-shadow: 0 0 4px rgba(52, 211, 153, 0.6);
+  }
+  50% {
+    text-shadow: 0 0 12px rgba(52, 211, 153, 0.9);
+  }
 }
 .live-indicator {
   animation: live-glow 2s ease-in-out infinite;

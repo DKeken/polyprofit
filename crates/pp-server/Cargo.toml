@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 pp-core.workspace = true
 pp-discovery.workspace = true
+pp-whales.workspace = true
 axum.workspace = true
 tower-http.workspace = true
 tokio.workspace = true

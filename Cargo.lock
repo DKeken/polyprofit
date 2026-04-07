@@ -2911,6 +2911,8 @@ dependencies = [
  "pp-risk",
  "pp-server",
  "pp-strategy",
+ "pp-wallet",
+ "pp-whales",
  "tokio",
  "tokio-util",
  "tracing",
@@ -3029,6 +3031,7 @@ dependencies = [
  "futures",
  "pp-core",
  "pp-discovery",
+ "pp-whales",
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
@@ -3049,6 +3052,33 @@ dependencies = [
  "pp-risk",
  "rust_decimal",
  "rust_decimal_macros",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "pp-wallet"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anyhow",
+ "polymarket-client-sdk",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "pp-whales"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "pp-core",
+ "reqwest",
+ "rust_decimal",
+ "rust_decimal_macros",
+ "serde",
+ "serde_json",
  "tokio",
  "tracing",
 ]

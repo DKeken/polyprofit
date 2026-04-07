@@ -74,7 +74,8 @@ function Chip({
       onClick={onClick}
       className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all duration-200 border ${
         active
-          ? color ?? "bg-emerald-500/15 text-emerald-400 border-emerald-700/50"
+          ? (color ??
+            "bg-emerald-500/15 text-emerald-400 border-emerald-700/50")
           : "bg-zinc-800/60 text-zinc-500 border-zinc-700/50 hover:text-zinc-300 hover:border-zinc-600"
       }`}
     >
@@ -157,14 +158,13 @@ export default function Markets() {
       return true;
     })
     .sort(
-      (a, b) =>
-        new Date(a.end_time).getTime() - new Date(b.end_time).getTime(),
+      (a, b) => new Date(a.end_time).getTime() - new Date(b.end_time).getTime(),
     );
 
   return (
-    <div className="space-y-4 animate-slide-up">
+    <div className="space-y-4 animate-slide-up p-4">
       {/* Header + Filters */}
-      <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 card-glow">
+      <div className="bg-zinc-800 rounded-xl border border-zinc-700 p-4 card-glow">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <h2 className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">
@@ -204,9 +204,7 @@ export default function Markets() {
               active={kindFilter === k}
               onClick={() => setKindFilter(k)}
               color={
-                kindFilter === k && k !== "All"
-                  ? KIND_BADGE[k]
-                  : undefined
+                kindFilter === k && k !== "All" ? KIND_BADGE[k] : undefined
               }
             />
           ))}
@@ -223,7 +221,7 @@ export default function Markets() {
       </div>
 
       {/* Content */}
-      <div className="bg-zinc-900 rounded-xl border border-zinc-800 card-glow">
+      <div className="bg-zinc-800 rounded-xl border border-zinc-700 card-glow">
         {loading ? (
           <div className="p-4 space-y-2">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -239,8 +237,8 @@ export default function Markets() {
         ) : (
           <div className="overflow-x-auto max-h-[540px] overflow-y-auto">
             <table className="w-full text-left">
-              <thead className="sticky top-0 bg-zinc-900 z-10">
-                <tr className="text-[11px] text-zinc-500 uppercase border-b border-zinc-800">
+              <thead className="sticky top-0 bg-zinc-800 z-10">
+                <tr className="text-[11px] text-zinc-500 uppercase border-b border-zinc-700">
                   <th className="py-3 px-4">Asset</th>
                   <th className="py-3 px-4">Kind</th>
                   <th className="py-3 px-4">Question</th>
@@ -253,7 +251,7 @@ export default function Markets() {
                 {filtered.map((m) => (
                   <tr
                     key={m.condition_id}
-                    className="border-b border-zinc-800/30 text-sm hover:bg-zinc-800/20 transition-colors"
+                    className="border-b border-zinc-700/30 text-sm hover:bg-zinc-800/20 transition-colors"
                   >
                     <td
                       className={`py-3 px-4 font-medium ${assetColorMap[m.asset] ?? "text-zinc-300"}`}
@@ -263,7 +261,8 @@ export default function Markets() {
                     <td className="py-3 px-4">
                       <span
                         className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
-                          KIND_BADGE[m.kind] ?? "bg-zinc-800 text-zinc-400 border-zinc-700"
+                          KIND_BADGE[m.kind] ??
+                          "bg-zinc-800 text-zinc-400 border-zinc-700"
                         }`}
                       >
                         {m.kind}

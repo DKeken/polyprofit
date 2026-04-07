@@ -147,6 +147,13 @@ mod tests {
                 port: 3000,
                 frontend_dist: "./dist".into(),
             },
+            whales: pp_core::config::WhalesConfig {
+                min_trade_usd: dec!(200),
+                min_win_rate: 0.55,
+                min_roi: 0.15,
+                min_profit_usd: dec!(500),
+                poll_interval_secs: 300,
+            },
             asset_definitions: vec![
                 pp_core::config::AssetDef {
                     symbol: "BTC".to_string(),

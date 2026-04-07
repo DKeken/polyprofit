@@ -8,6 +8,8 @@ members = [
     "crates/pp-execution",
     "crates/pp-risk",
     "crates/pp-server",
+    "crates/pp-whales",
+    "crates/pp-wallet",
 ]
 
 [workspace.dependencies]
@@ -42,6 +44,8 @@ pp-strategy = { path = "crates/pp-strategy" }
 pp-execution = { path = "crates/pp-execution" }
 pp-risk = { path = "crates/pp-risk" }
 pp-server = { path = "crates/pp-server" }
+pp-whales = { path = "crates/pp-whales" }
+pp-wallet = { path = "crates/pp-wallet" }
 
 [package]
 name = "polyprofit"
@@ -56,6 +60,9 @@ pp-strategy.workspace = true
 pp-execution.workspace = true
 pp-risk.workspace = true
 pp-server.workspace = true
+pp-whales.workspace = true
+pp-wallet.workspace = true
+
 tokio.workspace = true
 tokio-util = { workspace = true }
 tracing.workspace = true

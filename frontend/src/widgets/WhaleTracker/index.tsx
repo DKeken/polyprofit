@@ -198,7 +198,7 @@ export default function WhaleTracker({
             className={`flex-1 py-1.5 rounded text-[10px] font-mono uppercase tracking-widest border transition-colors ${
               mobileTab === tab
                 ? "bg-emerald-500/15 text-emerald-400 border-emerald-700/40"
-                : "bg-transparent text-zinc-500 border-zinc-800 hover:text-zinc-300"
+                : "bg-transparent text-zinc-500 border-zinc-700 hover:text-zinc-300"
             }`}
           >
             {tab === "registry"
@@ -336,7 +336,7 @@ function RegistryTab({
         </div>
         <button
           onClick={() => onSort(sortKey)}
-          className="px-2 py-1.5 rounded border border-zinc-700 bg-zinc-900 text-zinc-400 text-[10px] font-mono hover:text-zinc-200 hover:border-zinc-500 transition-colors"
+          className="px-2 py-1.5 rounded border border-zinc-700 bg-zinc-800 text-zinc-400 text-[10px] font-mono hover:text-zinc-200 hover:border-zinc-500 transition-colors"
           title={sortDir === "desc" ? "Descending" : "Ascending"}
         >
           {sortDir === "desc" ? "↓" : "↑"}
@@ -346,7 +346,7 @@ function RegistryTab({
           className={`px-2.5 py-1.5 rounded border text-[10px] font-mono transition-colors ${
             filterFollowed
               ? "bg-emerald-500/15 text-emerald-400 border-emerald-700/40"
-              : "bg-zinc-900 text-zinc-500 border-zinc-700 hover:text-zinc-300"
+              : "bg-zinc-800 text-zinc-500 border-zinc-700 hover:text-zinc-300"
           }`}
         >
           Following
@@ -496,7 +496,7 @@ function AddWhaleRow({
   }
 
   return (
-    <div className="bg-zinc-900/60 border border-zinc-800/60 rounded-xl p-3 flex flex-col gap-2 shrink-0">
+    <div className="bg-zinc-800/60 border border-zinc-700/60 rounded-xl p-3 flex flex-col gap-2 shrink-0">
       <p className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">
         Add Whale
       </p>
@@ -528,7 +528,7 @@ function AddWhaleRow({
       {err && <p className="text-[10px] font-mono text-red-400">{err}</p>}
 
       {preview && (
-        <div className="bg-zinc-950/60 border border-zinc-800/40 rounded-lg p-2 flex items-start justify-between gap-2">
+        <div className="bg-zinc-800/60 border border-zinc-700/40 rounded-lg p-2 flex items-start justify-between gap-2">
           <div>
             <p className="text-[11px] font-mono text-zinc-200">
               {preview.display_name ?? shortenAddress(preview.address)}
@@ -656,7 +656,7 @@ function WhaleRowItem({
           <button
             disabled={busy}
             onClick={() => act(() => onUntrack(w.address))}
-            className="px-2 py-0.5 rounded text-[9px] font-mono border border-zinc-800 text-zinc-600 hover:text-red-400 hover:border-red-900/50 transition-colors disabled:opacity-40"
+            className="px-2 py-0.5 rounded text-[9px] font-mono border border-zinc-700 text-zinc-600 hover:text-red-400 hover:border-red-900/50 transition-colors disabled:opacity-40"
           >
             Remove
           </button>

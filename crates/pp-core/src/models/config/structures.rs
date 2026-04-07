@@ -1,5 +1,3 @@
-use serde::Serialize;
-
 use rust_decimal::Decimal;
 use serde::Deserialize;
 

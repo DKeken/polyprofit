@@ -11,6 +11,30 @@ use uuid::Uuid;
 use pp_core::{AppState, Asset, Config};
 use pp_execution::fee_cache;
 
+/// Load .env file if present (credentials saved from frontend).
+fn load_dotenv() {
+    let path = std::path::Path::new(".env");
+    if !path.exists() {
+        return;
+    }
+    if let Ok(content) = std::fs::read_to_string(path) {
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some((key, val)) = line.split_once('=') {
+                let key = key.trim();
+                let val = val.trim().trim_matches('"');
+                if std::env::var(key).is_err() {
+                    // SAFETY: called before any threads are spawned (single-threaded init)
+                    unsafe { std::env::set_var(key, val); }
+                }
+            }
+        }
+    }
+}
+
 fn credential_bundle_from_legacy_env() -> Result<Option<Credentials>> {
     let api_key = std::env::var("POLYMARKET_API_KEY")
         .ok()
@@ -179,6 +203,7 @@ async fn main() -> Result<()> {
         .json()
         .init();
 
+    load_dotenv();
     info!("polyprofit starting...");
 
     let config = Arc::new(Config::load("config.toml")?);
@@ -198,33 +223,38 @@ async fn main() -> Result<()> {
 
     let fee_cache = fee_cache::new_fee_cache();
 
-    // ── Runtime authentication ──
-    let live = authenticate_runtime().await?;
-    let clob = Arc::new(live.client);
-    let signer = live.signer;
-
-    let (signal_tx, signal_rx) = tokio::sync::mpsc::channel(256);
-
     let assets: Vec<Asset> = config.strategy.assets.iter().map(|s| Asset::new(s)).collect();
     maybe_discover_markets(&state, &assets).await;
-
-    info!("Runtime started with execution capability");
 
     // ── Shutdown signal listener ──
     let shutdown_signal = wait_for_shutdown_signal();
 
     // ── Task spawning ──
-    // Each task gets its own Arc clone of shared state.
-    // The shutdown token inside AppState is checked by each loop.
     let mut tasks = tokio::task::JoinSet::new();
 
+    // Public loops always run (server, feeds, discovery)
     spawn_public_loops(&mut tasks, state.clone(), assets.clone(), config.clone());
-    spawn_signal_loop(&mut tasks, state.clone(), config.clone(), signal_tx);
-    spawn_execution_loop(&mut tasks, state.clone(), clob.clone(), signer, signal_rx);
-    spawn_authenticated_loops(&mut tasks, state.clone(), clob, fee_cache.clone());
 
-    state.heartbeat_alive.store(true, std::sync::atomic::Ordering::Relaxed);
-    state.paused.store(false, std::sync::atomic::Ordering::Relaxed);
+    // ── Runtime authentication (optional) ──
+    match authenticate_runtime().await {
+        Ok(live) => {
+            let clob = Arc::new(live.client);
+            let signer = live.signer;
+            let (signal_tx, signal_rx) = tokio::sync::mpsc::channel(256);
+
+            spawn_signal_loop(&mut tasks, state.clone(), config.clone(), signal_tx);
+            spawn_execution_loop(&mut tasks, state.clone(), clob.clone(), signer, signal_rx);
+            spawn_authenticated_loops(&mut tasks, state.clone(), clob, fee_cache.clone());
+
+            state.heartbeat_alive.store(true, std::sync::atomic::Ordering::Relaxed);
+            state.paused.store(false, std::sync::atomic::Ordering::Relaxed);
+            info!("Runtime started with execution capability");
+        }
+        Err(e) => {
+            warn!("No trading credentials: {e}");
+            info!("Running in observer mode — configure credentials at http://localhost:{}/", config.server.port);
+        }
+    }
 
 
     tokio::select! {

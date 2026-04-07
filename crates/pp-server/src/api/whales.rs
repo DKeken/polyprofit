@@ -3,7 +3,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use pp_core::{AppState, WhaleActivity, WhaleProfile};
+use pp_core::AppState;
 use pp_whales::{profile_to_whale, DataApiClient};
 use crate::api::dto::{
     WhalesResponse, WhaleRow, WhaleActivityResponse, WhaleEventRow,
@@ -74,11 +74,10 @@ pub async fn lookup_whale(
             Json(serde_json::json!({ "error": "address not found on Polymarket" })),
         )
             .into_response(),
-        Err(e) => (
-            StatusCode::BAD_GATEWAY,
-            Json(serde_json::json!({ "error": e.to_string() })),
-        )
-            .into_response(),
+        Err(e) => {
+            let msg = e.to_string();
+            (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": msg }))).into_response()
+        }
     }
 }
 
@@ -114,11 +113,10 @@ pub async fn track_whale(
             Json(serde_json::json!({ "error": "address not found on Polymarket" })),
         )
             .into_response(),
-        Err(e) => (
-            StatusCode::BAD_GATEWAY,
-            Json(serde_json::json!({ "error": e.to_string() })),
-        )
-            .into_response(),
+        Err(e) => {
+            let msg = e.to_string();
+            (StatusCode::BAD_GATEWAY, Json(serde_json::json!({ "error": msg }))).into_response()
+        }
     }
 }
 
