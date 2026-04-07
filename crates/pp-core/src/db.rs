@@ -16,7 +16,7 @@ use redb::{Database, DatabaseError, ReadableTable, ReadableTableMetadata, TableD
 use tracing::{debug, info, warn};
 
 use crate::models::config::RuntimeConfig;
-use crate::types::TradeLog;
+use crate::types::{TradeLog, WhaleProfile};
 
 // ── Table definitions ──
 
@@ -29,6 +29,10 @@ const STATE: TableDefinition<&str, &str> = TableDefinition::new("state");
 
 /// Config: single key "runtime" → JSON-encoded RuntimeConfig
 const CONFIG: TableDefinition<&str, &str> = TableDefinition::new("config");
+
+/// Whales: string address → JSON-encoded WhaleProfile
+const WHALES: TableDefinition<&str, &str> = TableDefinition::new("whales");
+
 
 /// Wrapper around redb::Database for bot persistence.
 pub struct BotDb {
@@ -54,6 +58,7 @@ impl BotDb {
             let _ = txn.open_table(TRADES)?;
             let _ = txn.open_table(STATE)?;
             let _ = txn.open_table(CONFIG)?;
+            let _ = txn.open_table(WHALES)?;
         }
         txn.commit()?;
 
@@ -231,6 +236,46 @@ impl BotDb {
     /// Load the last trading day date.
     pub fn load_trading_date(&self) -> Result<Option<String>> {
         self.load_state("trading_date")
+    }
+
+    // ── Whales ──
+
+    /// Save a tracked whale profile.
+    pub fn save_whale(&self, profile: &WhaleProfile) -> Result<()> {
+        let json = serde_json::to_string(profile)?;
+        let txn = self.db.begin_write()?;
+        {
+            let mut table = txn.open_table(WHALES)?;
+            table.insert(profile.address.as_str(), json.as_str())?;
+        }
+        txn.commit()?;
+        Ok(())
+    }
+
+    /// Load all tracked whales.
+    pub fn load_whales(&self) -> Result<Vec<WhaleProfile>> {
+        let txn = self.db.begin_read()?;
+        let table = txn.open_table(WHALES)?;
+        let mut loaded = Vec::new();
+        for entry in table.iter()? {
+            let (_, val) = entry?;
+            match serde_json::from_str::<WhaleProfile>(val.value()) {
+                Ok(w) => loaded.push(w),
+                Err(e) => warn!("Skipping corrupt whale record: {e}"),
+            }
+        }
+        Ok(loaded)
+    }
+
+    /// Delete a tracked whale.
+    pub fn delete_whale(&self, address: &str) -> Result<()> {
+        let txn = self.db.begin_write()?;
+        {
+            let mut table = txn.open_table(WHALES)?;
+            table.remove(address)?;
+        }
+        txn.commit()?;
+        Ok(())
     }
 }
 

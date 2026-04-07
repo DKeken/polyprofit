@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { whaleApi } from "../api";
-import type { WhaleRow, WhaleEventRow } from "../api";
+import type { WhaleRow, WhaleEventRow, WhaleHistoryResponse } from "../api";
 
 export type { WhaleRow, WhaleEventRow };
 
@@ -14,7 +14,7 @@ interface WhalesState {
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 
-export function useWhales() {
+export function useWhales(trigger?: number) {
   const [state, setState] = useState<WhalesState>({
     whales: [],
     activity: [],
@@ -50,7 +50,7 @@ export function useWhales() {
     fetchAll();
     const timer = setInterval(fetchAll, POLL_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [fetchAll]);
+  }, [fetchAll, trigger]);
 
   const trackWhale = useCallback(
     async (address: string, displayName?: string) => {
@@ -97,6 +97,57 @@ export function useWhales() {
     }
   }, [fetchAll]);
 
+  /** Bulk action on multiple addresses. Re-fetches after to sync state. */
+  const bulkAction = useCallback(
+    async (addresses: string[], action: string) => {
+      await whaleApi.bulk(addresses, action);
+      // Optimistic local update then re-fetch
+      if (action === "delete") {
+        setState((prev) => ({
+          ...prev,
+          whales: prev.whales.filter((w) => !addresses.includes(w.address)),
+        }));
+      } else if (action === "archive") {
+        setState((prev) => ({
+          ...prev,
+          whales: prev.whales.map((w) =>
+            addresses.includes(w.address) ? { ...w, archived: true } : w,
+          ),
+        }));
+      } else if (action === "unarchive") {
+        setState((prev) => ({
+          ...prev,
+          whales: prev.whales.map((w) =>
+            addresses.includes(w.address) ? { ...w, archived: false } : w,
+          ),
+        }));
+      } else if (action === "follow") {
+        setState((prev) => ({
+          ...prev,
+          whales: prev.whales.map((w) =>
+            addresses.includes(w.address) ? { ...w, followed: true } : w,
+          ),
+        }));
+      } else if (action === "unfollow") {
+        setState((prev) => ({
+          ...prev,
+          whales: prev.whales.map((w) =>
+            addresses.includes(w.address) ? { ...w, followed: false } : w,
+          ),
+        }));
+      }
+    },
+    [],
+  );
+
+  /** Fetch historical trades for a specific whale from the server. */
+  const fetchHistory = useCallback(
+    async (address: string): Promise<WhaleHistoryResponse> => {
+      return whaleApi.history(address);
+    },
+    [],
+  );
+
   return {
     ...state,
     refresh: fetchAll,
@@ -105,5 +156,7 @@ export function useWhales() {
     toggleFollow,
     lookupWhale,
     pollWhales,
+    bulkAction,
+    fetchHistory,
   };
 }

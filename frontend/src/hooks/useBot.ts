@@ -67,6 +67,8 @@ const INITIAL: Tick = {
   },
   drawdown_pct: 0,
   uptime_secs: 0,
+  whale_events_count: 0,
+  whale_alert_count: 0,
   open_positions: [],
 };
 

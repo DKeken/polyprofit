@@ -181,8 +181,16 @@ fn spawn_public_loops(
     let s = state.clone();
     tasks.spawn(async move { pp_server::run_server(s, &srv_cfg).await });
 
-    let s = state;
+    let s = state.clone();
     tasks.spawn(async move { pp_core::db::checkpoint_loop(s, 30).await });
+
+    // Whale auto-scan cron: runs every 10 minutes automatically
+    let s = state.clone();
+    tasks.spawn(async move { pp_server::api::jobs::whale_auto_scan_loop(s).await });
+
+    // Fast followed-whale watcher: runs every 30 seconds for followed wallets
+    let s = state;
+    tasks.spawn(async move { pp_server::api::jobs::whale_followed_watch_loop(s).await });
 }
 
 async fn maybe_discover_markets(state: &Arc<AppState>, assets: &[Asset]) {
@@ -389,5 +397,18 @@ fn restore_persisted_state(state: &Arc<AppState>, config: &Config) {
             info!(balance_cents = current, "New trading day — daily PnL reset");
         }
     }
+
+    // 5. Restore tracked whales
+    if let Some(ref db) = state.db
+        && let Ok(whales) = db.load_whales() {
+            let mut count = 0;
+            for whale in whales {
+                state.whales.insert(whale.address.clone(), whale);
+                count += 1;
+            }
+            if count > 0 {
+                info!(count, "Whales restored from database");
+            }
+        }
 }
 

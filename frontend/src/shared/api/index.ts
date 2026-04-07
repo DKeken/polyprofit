@@ -4,7 +4,7 @@
  */
 export * from "../../api";
 
-// ── Whale endpoints ──
+// ── Whale types ──────────────────────────────────────────────────────────────
 
 export interface WhaleRow {
   address: string;
@@ -16,6 +16,7 @@ export interface WhaleRow {
   markets_traded: number;
   last_seen: string;
   followed: boolean;
+  archived: boolean;
 }
 
 export interface WhalesResponse {
@@ -37,6 +38,18 @@ export interface WhaleEventRow {
 export interface WhaleActivityResponse {
   events: WhaleEventRow[];
 }
+
+export interface WhaleHistoryResponse {
+  address: string;
+  trades: WhaleEventRow[];
+}
+
+export interface BulkActionResponse {
+  affected: number;
+  action: string;
+}
+
+// ── HTTP helpers ──────────────────────────────────────────────────────────────
 
 const BASE = "";
 
@@ -68,6 +81,8 @@ async function del<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// ── Whale API ──────────────────────────────────────────────────────────────────
+
 export interface LookupResult {
   whale: WhaleRow | null;
   error?: string;
@@ -76,6 +91,8 @@ export interface LookupResult {
 export const whaleApi = {
   listWhales: () => get<WhalesResponse>("/api/whales"),
   activity: () => get<WhaleActivityResponse>("/api/whales/activity"),
+  history: (address: string) =>
+    get<WhaleHistoryResponse>(`/api/whales/${encodeURIComponent(address)}/history`),
   lookup: (address: string) =>
     post<{ whale: WhaleRow }>("/api/whales/lookup", { address }),
   track: (address: string, display_name?: string) =>
@@ -93,4 +110,17 @@ export const whaleApi = {
       `/api/whales/${encodeURIComponent(address)}`,
     ),
   poll: () => post<{ ok: boolean; tracked: number }>("/api/whales/poll", {}),
+  bulk: (addresses: string[], action: string) =>
+    post<BulkActionResponse>("/api/whales/bulk", { addresses, action }),
+  scanStatus: () => get<ScanStatus>("/api/whales/scan-status"),
 } as const;
+
+// ── Scan status type ───────────────────────────────────────────────────────────
+export interface ScanStatus {
+  /** Unix epoch seconds of last completed scan (0 = never) */
+  last_scan: number;
+  /** Unix epoch seconds of when next scan will run */
+  next_scan: number;
+  /** Scan interval in seconds */
+  interval_secs: number;
+}

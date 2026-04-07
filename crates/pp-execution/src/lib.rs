@@ -47,6 +47,7 @@ impl AutoSigner {
             }
         };
 
+        let has_creds = credentials.is_some();
         if let Some(credentials) = credentials {
             auth = auth.credentials(credentials);
         }
@@ -56,7 +57,9 @@ impl AutoSigner {
             .await
             .context("CLOB authentication failed")?;
 
-        ClobClient::start_heartbeats(&mut client)?;
+        if has_creds {
+            ClobClient::start_heartbeats(&mut client)?;
+        }
         Ok(client)
     }
 

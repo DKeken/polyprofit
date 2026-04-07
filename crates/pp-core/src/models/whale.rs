@@ -23,6 +23,9 @@ pub struct WhaleProfile {
     pub last_seen: DateTime<Utc>,
     /// Whether we mirror this whale's signals in our strategy
     pub followed: bool,
+    /// Soft-delete: archived whales are hidden from active list but retained in DB
+    #[serde(default)]
+    pub archived: bool,
 }
 
 /// A single large trade observed from a whale wallet.

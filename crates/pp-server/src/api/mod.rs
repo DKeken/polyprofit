@@ -32,7 +32,10 @@ pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/whales/poll", axum::routing::post(whales::trigger_whale_poll))
         .route("/whales/lookup", axum::routing::post(whales::lookup_whale))
         .route("/whales/track", axum::routing::post(whales::track_whale))
+        .route("/whales/bulk", axum::routing::post(whales::bulk_action))
+        .route("/whales/scan-status", get(whales::scan_status))
         .route("/whales/{address}/follow", axum::routing::post(whales::toggle_follow))
+        .route("/whales/{address}/history", get(whales::whale_history))
         .route("/whales/{address}", axum::routing::delete(whales::untrack_whale))
         .route("/auth", axum::routing::post(auth::set_credentials))
 }

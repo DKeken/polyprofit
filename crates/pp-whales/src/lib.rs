@@ -58,18 +58,12 @@ pub struct UserProfile {
     #[serde(rename = "proxyWallet", default)]
     #[allow(dead_code)]
     pub proxy_wallet: String,
-    #[serde(rename = "displayName", default)]
-    pub display_name: Option<String>,
+    #[serde(rename = "userName", default)]
+    pub user_name: Option<String>,
     #[serde(default)]
-    pub profit: Option<String>,
+    pub pnl: Option<f64>,
     #[serde(default)]
-    pub roi: Option<f64>,
-    #[serde(rename = "winRate", default)]
-    pub win_rate: Option<f64>,
-    #[serde(rename = "volume", default)]
-    pub volume: Option<String>,
-    #[serde(rename = "marketsTraded", default)]
-    pub markets_traded: Option<u64>,
+    pub vol: Option<f64>,
 }
 
 // ── Client ──────────────────────────────────────────────────────────────────
@@ -98,44 +92,89 @@ impl DataApiClient {
         Ok(resp.json::<Vec<TradeEvent>>().await?)
     }
 
-    /// Fetch a user's profile stats from the Data API.
+    /// Fetch a user's profile stats from the Data API using the leaderboard endpoint.
     pub async fn fetch_profile(&self, address: &str) -> Result<Option<UserProfile>> {
-        let url = format!("{DATA_API}/profiles/{address}");
+        let url = format!("{DATA_API}/v1/leaderboard?user={address}");
         let resp = self.http.get(&url).send().await?;
         if resp.status() == reqwest::StatusCode::NOT_FOUND {
             return Ok(None);
         }
         if !resp.status().is_success() {
-            anyhow::bail!("profiles endpoint returned {}", resp.status());
+            anyhow::bail!("leaderboard endpoint returned {}", resp.status());
         }
-        let profile: UserProfile = resp.json().await?;
-        Ok(Some(profile))
+        let list: Vec<UserProfile> = resp.json().await?;
+        Ok(list.into_iter().next())
+    }
+
+    /// Fetch a specific user's trade history from the Polymarket Data API.
+    /// Returns trades in reverse-chronological order (newest first).
+    pub async fn fetch_user_trades(&self, address: &str, limit: u32) -> Result<Vec<UserTrade>> {
+        let url = format!("{DATA_API}/trades?user={address}&limit={limit}");
+        let resp = self.http.get(&url).send().await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("trades endpoint returned {}", resp.status());
+        }
+        let raw: Vec<TradeEvent> = resp.json().await?;
+        let now = chrono::Utc::now();
+        let trades = raw
+            .into_iter()
+            .map(|t| {
+                let shares = rust_decimal::Decimal::try_from(t.size.unwrap_or(0.0)).unwrap_or(rust_decimal::Decimal::ZERO);
+                let price_dec = rust_decimal::Decimal::try_from(t.price.unwrap_or(0.0)).unwrap_or(rust_decimal::Decimal::ZERO);
+                let amount = shares * price_dec;
+                let ts: chrono::DateTime<chrono::Utc> = t
+                    .timestamp
+                    .and_then(|secs| chrono::DateTime::from_timestamp(secs, 0))
+                    .unwrap_or(now);
+                let side = match t.outcome.as_deref() {
+                    Some(o) => format!("{} {}", t.side, o),
+                    None => t.side.clone(),
+                };
+                UserTrade {
+                    condition_id: t.condition_id,
+                    side,
+                    amount: amount.to_string(),
+                    price: price_dec.to_string(),
+                    timestamp: ts.to_rfc3339(),
+                    question: t.title,
+                }
+            })
+            .collect();
+        Ok(trades)
     }
 }
+
+/// A parsed trade record for a specific user's history.
+#[derive(Debug, serde::Serialize)]
+pub struct UserTrade {
+    pub condition_id: String,
+    pub side: String,
+    pub amount: String,
+    pub price: String,
+    pub timestamp: String,
+    pub question: Option<String>,
+}
+
 
 /// Convert a raw `UserProfile` from the Data API into a `WhaleProfile`.
 /// Returns `None` if essential fields are missing.
 pub fn profile_to_whale(address: String, profile: &UserProfile) -> Option<WhaleProfile> {
-    let profit: Decimal = profile
-        .profit
-        .as_deref()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(Decimal::ZERO);
-    let volume: Decimal = profile
-        .volume
-        .as_deref()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(Decimal::ZERO);
+    let profit: Decimal = Decimal::try_from(profile.pnl.unwrap_or(0.0)).unwrap_or(Decimal::ZERO);
+    let volume: Decimal = Decimal::try_from(profile.vol.unwrap_or(0.0)).unwrap_or(Decimal::ZERO);
     Some(WhaleProfile {
         address,
-        display_name: profile.display_name.clone(),
+        display_name: profile.user_name.clone(),
         profit,
-        roi: profile.roi.unwrap_or(0.0),
-        win_rate: profile.win_rate.unwrap_or(0.0),
+        // Since Polymarket removed the /profiles API, `roi` and `win_rate` are no longer trivial to fetch.
+        // We set them to arbitrary safe high values so they bypass the minimum gating checks in `run_poll_cycle`,
+        // allowing us to track whales purely based on trading size and total PnL.
+        roi: 999.0, 
+        win_rate: 1.0, 
         volume,
-        markets_traded: profile.markets_traded.unwrap_or(0),
+        markets_traded: 0,
         last_seen: Utc::now(),
         followed: false,
+        archived: false,
     })
 }
 
@@ -234,53 +273,34 @@ pub async fn run_poll_cycle(client: &DataApiClient, state: &Arc<AppState>) -> Re
             }
         };
 
-        let win_rate = profile.win_rate.unwrap_or(0.0);
-        let roi = profile.roi.unwrap_or(0.0);
-        let profit: Decimal = profile
-            .profit
-            .as_deref()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(Decimal::ZERO);
-        let volume: Decimal = profile
-            .volume
-            .as_deref()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(Decimal::ZERO);
+        let whale = match profile_to_whale(address.clone(), &profile) {
+            Some(w) => w,
+            None => continue,
+        };
 
-        if win_rate < cfg.min_whale_win_rate
-            || roi < cfg.min_whale_roi
-            || profit < cfg.min_whale_profit_usd
+        if whale.win_rate < cfg.min_whale_win_rate
+            || whale.roi < cfg.min_whale_roi
+            || whale.profit < cfg.min_whale_profit_usd
         {
             debug!(
                 address,
-                win_rate,
-                roi,
-                %profit,
+                win_rate = whale.win_rate,
+                roi = whale.roi,
+                profit = %whale.profit,
                 "Wallet does not meet whale criteria"
             );
             continue;
         }
 
-        let whale = WhaleProfile {
-            address: address.clone(),
-            display_name: profile.display_name,
-            profit,
-            roi,
-            win_rate,
-            volume,
-            markets_traded: profile.markets_traded.unwrap_or(0),
-            last_seen: now,
-            followed: false,
-        };
-
         info!(
             address,
-            win_rate,
-            roi,
-            %profit,
+            win_rate = whale.win_rate,
+            roi = whale.roi,
+            profit = %whale.profit,
             "New whale tracked"
         );
         state.whales.insert(address.clone(), whale);
+        state.metrics.whale_events.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     // Record new activities from tracked whales
@@ -289,6 +309,7 @@ pub async fn run_poll_cycle(client: &DataApiClient, state: &Arc<AppState>) -> Re
             continue;
         }
         state.record_whale_activity(activity);
+        state.metrics.whale_events.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     debug!(

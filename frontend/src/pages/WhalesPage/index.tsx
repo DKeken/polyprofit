@@ -1,7 +1,13 @@
+import { useBot } from "../../hooks/useBot";
 import { useWhales } from "../../shared/hooks/useWhales";
 import WhaleTracker from "../../widgets/WhaleTracker";
+import { useRoute } from "wouter";
 
 export default function WhalesPage() {
+  const [match, params] = useRoute("/whales/:address");
+  const selectedAddress = match ? params?.address : undefined;
+
+  const { tick } = useBot();
   const {
     whales,
     activity,
@@ -14,11 +20,13 @@ export default function WhalesPage() {
     toggleFollow,
     lookupWhale,
     pollWhales,
-  } = useWhales();
+    bulkAction,
+  } = useWhales(tick.whale_events_count);
 
   return (
-    <div className="flex-1 min-h-0 overflow-auto">
+    <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
       <WhaleTracker
+        selectedAddress={selectedAddress}
         whales={whales}
         activity={activity}
         loading={loading}
@@ -30,6 +38,7 @@ export default function WhalesPage() {
         onToggleFollow={toggleFollow}
         onLookup={lookupWhale}
         onPoll={pollWhales}
+        onBulk={bulkAction}
       />
     </div>
   );

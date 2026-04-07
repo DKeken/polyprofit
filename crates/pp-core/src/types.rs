@@ -23,6 +23,9 @@ pub struct Metrics {
     pub ws_reconnects: AtomicU64,
     pub slow_cancel_replace: AtomicU64,
     pub heartbeat_failures: AtomicU64,
+    pub whale_events: AtomicU64,
+    /// Incremented only for high-value trades by **followed** whales — drives toast alerts
+    pub whale_alert_count: AtomicU64,
 }
 
 // ── Shared App State ──
@@ -54,6 +57,12 @@ pub struct AppState {
     pub whales: DashMap<String, WhaleProfile>,
     pub recent_whale_activity: parking_lot::RwLock<Vec<WhaleActivity>>,
     pub whale_job_queue: tokio::sync::OnceCell<std::sync::Arc<crate::jobs::JobQueue<crate::jobs::DynJob>>>,
+    /// Unix epoch seconds of the last whale scan completion (0 = never)
+    pub whale_last_scan: AtomicI64,
+    /// Unix epoch seconds when the next whale auto-scan is scheduled
+    pub whale_next_scan: AtomicI64,
+    /// Dedup set: key = "address:condition_id:timestamp_unix" — prevents duplicate alerts
+    pub whale_seen_activity: DashMap<String, ()>,
 }
 
 impl AppState {
@@ -80,6 +89,9 @@ impl AppState {
             whales: DashMap::new(),
             recent_whale_activity: parking_lot::RwLock::new(Vec::new()),
             whale_job_queue: tokio::sync::OnceCell::new(),
+            whale_last_scan: AtomicI64::new(0),
+            whale_next_scan: AtomicI64::new(0),
+            whale_seen_activity: DashMap::new(),
         })
     }
 
@@ -107,6 +119,9 @@ impl AppState {
             whales: DashMap::new(),
             recent_whale_activity: parking_lot::RwLock::new(Vec::new()),
             whale_job_queue: tokio::sync::OnceCell::new(),
+            whale_last_scan: AtomicI64::new(0),
+            whale_next_scan: AtomicI64::new(0),
+            whale_seen_activity: DashMap::new(),
         })
     }
 
@@ -254,6 +269,9 @@ impl Default for AppState {
             whales: DashMap::new(),
             recent_whale_activity: parking_lot::RwLock::new(Vec::new()),
             whale_job_queue: tokio::sync::OnceCell::new(),
+            whale_last_scan: AtomicI64::new(0),
+            whale_next_scan: AtomicI64::new(0),
+            whale_seen_activity: DashMap::new(),
         }
     }
 }

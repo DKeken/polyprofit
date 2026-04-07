@@ -189,6 +189,7 @@ pub struct WhaleRow {
     pub markets_traded: u64,
     pub last_seen: String,
     pub followed: bool,
+    pub archived: bool,
 }
 
 #[derive(Serialize)]
@@ -220,8 +221,38 @@ pub struct TrackRequest {
 }
 
 #[derive(Deserialize)]
+pub struct BulkActionRequest {
+    pub addresses: Vec<String>,
+    /// One of: "archive", "unarchive", "follow", "unfollow", "delete"
+    pub action: String,
+}
+
+#[derive(Serialize)]
+pub struct BulkActionResponse {
+    pub affected: usize,
+    pub action: String,
+}
+
+#[derive(Serialize)]
+pub struct WhaleHistoryResponse {
+    pub address: String,
+    pub trades: Vec<WhaleEventRow>,
+}
+
+#[derive(Deserialize)]
 pub struct AssetDefUpdate {
     pub symbol: String,
     pub binance_symbol: String,
     pub keywords: Vec<String>,
+}
+
+/// Whale auto-scan metadata returned by GET /api/whales/scan-status
+#[derive(Serialize)]
+pub struct ScanStatusResponse {
+    /// Unix epoch seconds of last completed scan (0 = never)
+    pub last_scan: i64,
+    /// Unix epoch seconds of next scheduled scan
+    pub next_scan: i64,
+    /// Scan interval in seconds
+    pub interval_secs: u64,
 }

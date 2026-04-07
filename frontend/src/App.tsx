@@ -1,6 +1,8 @@
 import { Suspense, lazy, useState, useEffect } from "react";
 import { Link, Route, Switch, useLocation } from "wouter";
 import { useBot } from "./hooks/useBot";
+import { ToastProvider } from "./shared/ui/ToastProvider";
+import { useWhaleAlerts } from "./shared/ui/useWhaleAlerts";
 
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const WhalesPage = lazy(() => import("./pages/WhalesPage"));
@@ -32,12 +34,15 @@ function Loader() {
   );
 }
 
-function App() {
+function AppInner() {
   const [location] = useLocation();
   const [connected, setConnected] = useState<boolean | null>(null);
 
   const bot = useBot();
   const { tick, pause, resume, kill } = bot;
+
+  // Whale alerts — fires toast when a followed whale makes a significant trade
+  useWhaleAlerts(tick.whale_alert_count ?? 0);
 
   // Check if backend is reachable
   useEffect(() => {
@@ -186,6 +191,7 @@ function App() {
           <Switch>
             <Route path="/" component={DashboardPage} />
             <Route path="/whales" component={WhalesPage} />
+            <Route path="/whales/:address" component={WhalesPage} />
             <Route path="/markets" component={Markets} />
             <Route path="/analytics" component={Analytics} />
             <Route path="/connect" component={ConnectPage} />
@@ -194,6 +200,14 @@ function App() {
         </Suspense>
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <ToastProvider>
+      <AppInner />
+    </ToastProvider>
   );
 }
 

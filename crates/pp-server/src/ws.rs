@@ -184,6 +184,10 @@ struct Tick {
     drawdown_pct: f64,
     #[ts(type = "number")]
     uptime_secs: u64,
+    #[ts(type = "number")]
+    whale_events_count: u64,
+    #[ts(type = "number")]
+    whale_alert_count: u64,
     open_positions: Vec<PositionInfo>,
 }
 
@@ -361,6 +365,8 @@ fn build_tick(state: &Arc<AppState>) -> Tick {
         config: build_config_snapshot(state),
         drawdown_pct: drawdown_pct(state),
         uptime_secs: state.started_at.elapsed().as_secs(),
+        whale_events_count: state.metrics.whale_events.load(Ordering::Relaxed),
+        whale_alert_count: state.metrics.whale_alert_count.load(Ordering::Relaxed),
         open_positions: build_open_positions(state),
     }
 }
