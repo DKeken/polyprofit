@@ -330,24 +330,21 @@ fn restore_persisted_state(state: &Arc<AppState>, config: &Config) {
     state.rebuild_asset_registry();
 
     // 2. Restore balance checkpoint
-    if let Some(ref db) = state.db {
-        if let Ok(Some((pnl, peak))) = db.load_balance_checkpoint() {
+    if let Some(ref db) = state.db
+        && let Ok(Some((pnl, peak))) = db.load_balance_checkpoint() {
             state.daily_pnl.store(pnl, std::sync::atomic::Ordering::Relaxed);
             state.peak_balance.store(peak, std::sync::atomic::Ordering::Relaxed);
             info!(daily_pnl_cents = pnl, peak_cents = peak, "Balance checkpoint restored");
         }
-    }
 
     // 3. Restore trade history
-    if let Some(ref db) = state.db {
-        if let Ok(trades) = db.load_trades() {
-            if !trades.is_empty() {
+    if let Some(ref db) = state.db
+        && let Ok(trades) = db.load_trades()
+            && !trades.is_empty() {
                 info!(count = trades.len(), "Trade history restored from database");
                 let mut tl = state.trades.write();
                 *tl = trades;
             }
-        }
-    }
 
     // 4. Daily PnL reset (new day since last run)
     if let Some(ref db) = state.db {

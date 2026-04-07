@@ -135,7 +135,7 @@ fn handle_rtds_message(state: &Arc<AppState>, text: &str) -> Result<()> {
 
         if let Some(asset) = asset {
             let asset_display = asset.to_string();
-            let mut entry = state.prices.entry(asset).or_insert_with(PriceState::default);
+            let mut entry = state.prices.entry(asset).or_default();
             let ps = entry.value_mut();
 
             match data.source.as_str() {

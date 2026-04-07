@@ -322,6 +322,9 @@ pub struct AppState {
     /// Cancellation token for graceful shutdown.
     /// All async loops check this token and exit cleanly when cancelled.
     pub shutdown: CancellationToken,
+    pub whales: DashMap<String, WhaleProfile>,
+    pub recent_whale_activity: parking_lot::RwLock<Vec<WhaleActivity>>,
+    pub whale_job_queue: tokio::sync::OnceCell<std::sync::Arc<crate::jobs::queue::JobQueue<crate::jobs::queue::DynJob>>>,
 }
 
 impl AppState {

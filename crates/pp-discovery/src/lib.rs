@@ -164,7 +164,9 @@ fn classify_market(question: &str) -> MarketKind {
 
 fn extract_strike(question: &str) -> Option<Decimal> {
     // Look for $XX,XXX or $XX,XXX.XX patterns
-    let re_like = question
+    
+
+    question
         .split('$')
         .nth(1)
         .and_then(|s| {
@@ -174,9 +176,7 @@ fn extract_strike(question: &str) -> Option<Decimal> {
                 .collect();
             let cleaned = num_str.replace(',', "");
             cleaned.parse::<Decimal>().ok()
-        });
-
-    re_like
+        })
 }
 
 /// Parse YES/NO token IDs from the Gamma API's stringified JSON fields.
@@ -205,7 +205,7 @@ fn extract_tokens_from_clob(clob_token_ids: &str, outcomes: &str) -> (String, St
     }
 
     // Positional fallback when outcomes don't contain yes/no/up/down
-    if yes.is_empty() { yes = ids.get(0).cloned().unwrap_or_default(); }
+    if yes.is_empty() { yes = ids.first().cloned().unwrap_or_default(); }
     if no.is_empty()  { no  = ids.get(1).cloned().unwrap_or_default(); }
 
     (yes, no)

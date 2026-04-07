@@ -62,12 +62,11 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 ping_counter += 1;
 
                 // Send a ping every 30s to detect dead connections
-                if ping_counter % 30 == 0 {
-                    if sender.send(Message::Ping(vec![].into())).await.is_err() {
+                if ping_counter.is_multiple_of(30)
+                    && sender.send(Message::Ping(vec![].into())).await.is_err() {
                         debug!("WebSocket client disconnected (ping failed)");
                         break;
                     }
-                }
 
                 let tick = build_tick(&state);
                 let json = match serde_json::to_string(&tick) {

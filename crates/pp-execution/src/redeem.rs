@@ -139,11 +139,10 @@ pub async fn redeem_loop(state: Arc<AppState>, client: Arc<AuthClient>) -> Resul
         for entry in state.positions.iter() {
             let position = entry.value();
 
-            if let Some(market) = state.markets.get(&position.condition_id) {
-                if market.end_time <= now {
+            if let Some(market) = state.markets.get(&position.condition_id)
+                && market.end_time <= now {
                     to_redeem.push(position.condition_id.clone());
                 }
-            }
         }
 
         for condition_id in to_redeem {

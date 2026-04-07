@@ -1,0 +1,11 @@
+[package]
+name = "pp-wallet"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+tracing.workspace = true
+alloy.workspace = true
+polymarket-client-sdk.workspace = true
+uuid.workspace = true
