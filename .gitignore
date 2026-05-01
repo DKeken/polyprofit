@@ -40,5 +40,3 @@ logs/
 
 # Tool-generated
 .playwright-mcp/
-.swarm/
-.claude-flow/
