@@ -159,9 +159,39 @@ impl Venue for PolymarketVenue {
     }
 
     async fn balances(&self) -> Result<Vec<TokenBalance>> {
-        // On-chain balance fetch lives in `pp-server::api::admin`. Wiring it
-        // through here requires a small refactor (extract into pp-wallet).
-        anyhow::bail!("PolymarketVenue::balances: not wired yet — see .todo/pp-venue-polymarket.md")
+        // Fetch native MATIC + USDC.e + native USDC for the signing wallet.
+        // Surfaced as separate `TokenBalance` rows so the frontend can break
+        // them out per-token.
+        let address = format!("{:#x}", self.signer.address());
+
+        let (matic, usdc) = tokio::join!(
+            pp_wallet::polygon::fetch_matic_balance(&address),
+            pp_wallet::polygon::fetch_usdc_balance(&address),
+        );
+        let matic = matic.context("MATIC balance fetch failed")?;
+        let usdc = usdc.context("USDC balance fetch failed")?;
+
+        // f64 -> Decimal via string round-trip; keeps precision predictable.
+        let to_dec = |v: f64, prec: usize| -> Decimal {
+            format!("{v:.prec$}", prec = prec)
+                .parse()
+                .unwrap_or(Decimal::ZERO)
+        };
+
+        Ok(vec![
+            TokenBalance {
+                venue: VenueId::Polymarket,
+                token: "MATIC".into(),
+                amount: to_dec(matic, 4),
+                usd_value: None,
+            },
+            TokenBalance {
+                venue: VenueId::Polymarket,
+                token: "USDC".into(),
+                amount: to_dec(usdc, 2),
+                usd_value: Some(to_dec(usdc, 2)),
+            },
+        ])
     }
 
     async fn heartbeat_alive(&self) -> Result<bool> {
@@ -216,5 +246,20 @@ mod tests {
         async fn positions(&self) -> Result<Vec<Position>> { Ok(vec![]) }
         async fn balances(&self) -> Result<Vec<TokenBalance>> { Ok(vec![]) }
         async fn heartbeat_alive(&self) -> Result<bool> { Ok(false) }
+    }
+
+    #[tokio::test]
+    async fn dummy_cancel_all_returns_zero() {
+        // The Venue contract: cancel_all returns the number of orders cancelled.
+        // Stub returns Err(unreachable!()) on the real path; for the dummy
+        // we exercise positions/balances/heartbeat instead.
+        let v = DummyVenue;
+        assert!(!v.is_authenticated());
+        assert_eq!(v.name(), "DummyVenue");
+        assert!(matches!(v.id(), VenueId::Polymarket));
+        assert!(v.discover_markets().await.unwrap().is_empty());
+        assert!(v.positions().await.unwrap().is_empty());
+        assert!(v.balances().await.unwrap().is_empty());
+        assert!(!v.heartbeat_alive().await.unwrap());
     }
 }

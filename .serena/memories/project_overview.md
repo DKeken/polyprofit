@@ -1,8 +1,8 @@
 PolyProfit = Rust workspace + React/Vite frontend, multi-venue trading bot.
 
 ## Layout
-- 11 Rust crates: pp-core, pp-feeds, pp-discovery, pp-strategy, pp-execution, pp-risk, pp-server, pp-whales, pp-wallet, pp-venue, **pp-venue-polymarket**
-- Frontend `frontend/` — Bun 1.3 + Vite 8 + React 19 + Tailwind 4 + Recharts + Zustand + wouter
+- 11 Rust crates: pp-core, pp-feeds, pp-discovery, pp-strategy, pp-execution, pp-risk, pp-server, pp-whales, pp-wallet, pp-venue, pp-venue-polymarket
+- Frontend `frontend/` — Bun 1.3 + Vite 8 + React 19 + Tailwind 4 + Recharts + Zustand + wouter + **Playwright e2e**
 - DB: redb embedded
 - Auth: alloy LocalSigner + Polymarket SDK
 - Rust 1.95 nightly, edition 2024
@@ -24,37 +24,52 @@ src/
 │   ├── hooks/              # useSplitResize, useWhales, useScanStatus
 │   └── store/              # useAppStore (zustand)
 └── assets/
+e2e/                        # Playwright smoke tests (smoke.spec.ts, fixtures.ts)
+playwright.config.ts
 ```
 
-## Design system wired in
-- All ad-hoc `border-2 border-... animate-spin` spans replaced with `<Spinner />` (WhaleTracker, RegistryTab, ActivityTab, ScanSettingsModal, TradeChart, WalletPage)
-- `Loader2` from lucide replaced with `Spinner`
-- markets-list loading placeholder uses `<Skeleton />`
-
 ## Polymarket venue adapter (`pp-venue-polymarket`)
-- Stub crate that wraps `pp_venue::Venue` trait around existing pp-execution + pp-discovery code
-- `PolymarketVenue::place_order` → delegates to `pp_execution::orders::execute`
-- `cancel_order` / `cancel_all` → SDK cancel calls + state cleanup
+- Wraps `pp_venue::Venue` trait around existing pp-execution + pp-discovery code
+- `place_order` → `pp_execution::orders::execute`
+- `cancel_order` / `cancel_all` → SDK cancel + state cleanup
 - `discover_markets` → `pp_discovery::discover` + clones state.markets
 - `positions` → reads in-memory state.positions
 - `heartbeat_alive` → SDK `heartbeats_active()`
-- `balances` → not wired yet (RPC plumbing in pp-server::api::admin to extract first)
-- Compiles + passes its own unit test (`cargo test -p pp-venue-polymarket` 1 passed)
+- **`balances` ✅ wired** — fetches MATIC + USDC.e + native USDC via `pp_wallet::polygon::*`
+- 2 unit tests pass
+
+## pp-wallet polygon module
+- `pp_wallet::polygon` — extracted from `pp-server::api::admin`
+- `fetch_matic_balance(addr) -> f64`, `fetch_erc20_balance(token, wallet, decimals) -> f64`
+- `fetch_usdc_balance(addr) -> f64` (combines USDC.e + native USDC)
+- Constants: POLYGON_RPC, USDC_E_ADDRESS, USDC_NATIVE_ADDRESS
+- 2 unit tests (constants shape, balanceOf calldata layout)
+
+## pp-execution pure helpers
+- `maker_quote(side, size_usdc, best_bid, best_ask) -> (price, shares)` — extracted from `place_maker_order`
+- `taker_fill_price(side, best_bid, best_ask) -> Decimal` — extracted from `place_market_order`
+- 8 new unit tests covering Yes/No paths, edge bids/asks, zero-share rejection
 
 ## Tests (`make verify` exit 0)
-| Layer | Count | Δ |
-|---|---|---|
-| cargo test --workspace | **110** (23 suites) | +1 (PolymarketVenue trait check) |
-| bun test (frontend) | **78** (18 files) | +3 (markets-list smoke) |
-| **Total** | **188** | +4 |
+| Layer | Count |
+|---|---|
+| cargo test --workspace | **122** (23 suites) |
+| bun test (frontend unit) | **89** (21 files) |
+| Playwright e2e (chromium) | **3** |
+| **Total** | **214** |
 
-Frontend test breakdown:
+Frontend unit breakdown:
 - shared/lib/format: 8
 - shared/api/client: 2
 - shared/ui {Button,IconButton,Stat,Badge,Card,Modal,Tabs,Skeleton,Spinner,EmptyState}: 44
 - entities/{trade,market,position,whale}: 22
-- features/settings-form/ui: 2 (existing)
-- **features/markets-list/ui: 3 (NEW: render, asset-chip filter, free-text search)**
+- features/{settings-form: 2, markets-list: 3}: 5
+- widgets/{execution-log: 4, equity-curve: 3, trade-feed: 4}: 11
+
+Playwright smoke:
+- app boots + renders nav
+- markets page lists mocked markets
+- dashboard renders without crashing
 
 ## SDK (Polymarket)
 - Crate alias `polymarket_sdk` = `polymarket_client_sdk_v2 = "0.5"`
@@ -63,11 +78,12 @@ Frontend test breakdown:
 
 ## Verify (`make verify` exit 0)
 - `cargo build --workspace` ✅
-- `cargo test --workspace` ✅ 110
-- `cargo clippy --workspace --all-targets` ✅ 0 warnings
+- `cargo test --workspace` ✅ 122
+- `cargo clippy --workspace --all-targets -- -D warnings` ✅ 0 warnings
 - frontend `bun run lint` ✅
-- frontend `bun test` ✅ 78
+- frontend `bun run test` ✅ 89  *(uses `bun test src` — bunfig has no `root` field)*
 - frontend `bun run build` ✅
+- frontend `bun run e2e` ✅ 3 (separate, not in make verify)
 
 ## Hosts (May 2026)
 - CLOB: `https://clob.polymarket.com`

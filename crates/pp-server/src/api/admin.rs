@@ -49,18 +49,15 @@ pub async fn wallet_info() -> impl IntoResponse {
 
     let address = format!("{:#x}", wallet.address());
 
-    // Fetch MATIC balance via eth_getBalance
-    let matic_balance = match fetch_matic_balance(&address).await {
-        Ok(b) => b,
+    let matic_balance = match pp_wallet::polygon::fetch_matic_balance(&address).await {
+        Ok(b) => format!("{:.4}", b),
         Err(e) => {
             tracing::warn!("Failed to fetch MATIC balance: {e}");
             "0".to_string()
         }
     };
-
-    // Fetch USDC balance via ERC-20 balanceOf
-    let usdc_balance = match fetch_usdc_balance(&address).await {
-        Ok(b) => b,
+    let usdc_balance = match pp_wallet::polygon::fetch_usdc_balance(&address).await {
+        Ok(b) => format!("{:.2}", b),
         Err(e) => {
             tracing::warn!("Failed to fetch USDC balance: {e}");
             "0".to_string()
@@ -73,83 +70,6 @@ pub async fn wallet_info() -> impl IntoResponse {
         usdc_balance,
     })
     .into_response()
-}
-
-// ── On-chain balance helpers ──
-
-const POLYGON_RPC: &str = "https://polygon.drpc.org";
-/// USDC.e on Polygon (bridged) — used by Polymarket as collateral — 6 decimals
-const USDC_E_ADDRESS: &str = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
-/// Native USDC on Polygon — 6 decimals
-const USDC_NATIVE_ADDRESS: &str = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
-
-/// Fetch native MATIC (POL) balance via eth_getBalance
-async fn fetch_matic_balance(address: &str) -> anyhow::Result<String> {
-    let client = reqwest::Client::new();
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "method": "eth_getBalance",
-        "params": [address, "latest"],
-        "id": 1
-    });
-
-    let resp: serde_json::Value = client
-        .post(POLYGON_RPC)
-        .json(&body)
-        .send()
-        .await?
-        .json()
-        .await?;
-
-    let hex = resp["result"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("no result in eth_getBalance response"))?;
-
-    let wei = u128::from_str_radix(hex.trim_start_matches("0x"), 16)?;
-    let matic = wei as f64 / 1e18;
-    Ok(format!("{:.4}", matic))
-}
-
-/// Fetch ERC-20 balance via balanceOf call
-async fn fetch_erc20_balance(token_address: &str, wallet: &str, decimals: u32) -> anyhow::Result<f64> {
-    let client = reqwest::Client::new();
-    let addr_clean = wallet.trim_start_matches("0x");
-    let data = format!("0x70a08231{:0>64}", addr_clean);
-
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "method": "eth_call",
-        "params": [{
-            "to": token_address,
-            "data": data
-        }, "latest"],
-        "id": 1
-    });
-
-    let resp: serde_json::Value = client
-        .post(POLYGON_RPC)
-        .json(&body)
-        .send()
-        .await?
-        .json()
-        .await?;
-
-    let hex = resp["result"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("no result in eth_call response"))?;
-
-    let raw = u128::from_str_radix(hex.trim_start_matches("0x"), 16).unwrap_or(0);
-    Ok(raw as f64 / 10f64.powi(decimals as i32))
-}
-
-/// Fetch combined USDC balance (USDC.e + native USDC)
-async fn fetch_usdc_balance(address: &str) -> anyhow::Result<String> {
-    let (bridged, native) = tokio::join!(
-        fetch_erc20_balance(USDC_E_ADDRESS, address, 6),
-        fetch_erc20_balance(USDC_NATIVE_ADDRESS, address, 6),
-    );
-    let total = bridged.unwrap_or(0.0) + native.unwrap_or(0.0);
-    Ok(format!("{:.2}", total))
 }
 
 pub async fn pause(State(state): State<Arc<AppState>>) -> Json<BasicResponse> {

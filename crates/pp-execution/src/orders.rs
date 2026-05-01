@@ -60,27 +60,14 @@ async fn place_maker_order(
     client: &AuthClient,
     signer: &AutoSigner,
 ) -> Result<()> {
-    let ob = state
-        .orderbooks
-        .get(&signal.condition_id)
-        .ok_or_else(|| anyhow::anyhow!("No orderbook for {:?}", signal.condition_id))?;
-
-    // Post 1 tick ahead of best bid/ask to sit at top of book
-    let price = match signal.side {
-        Side::Yes => ob.best_bid + dec!(0.01),
-        Side::No => ob.best_ask - dec!(0.01),
+    let (best_bid, best_ask) = {
+        let ob = state
+            .orderbooks
+            .get(&signal.condition_id)
+            .ok_or_else(|| anyhow::anyhow!("No orderbook for {:?}", signal.condition_id))?;
+        (ob.best_bid, ob.best_ask)
     };
-    drop(ob);
-
-    if price <= dec!(0) || price >= dec!(1) {
-        bail!("Price {price} out of valid range (0, 1)");
-    }
-
-    // Compute shares from USDC budget. Truncate to 2dp (SDK LOT_SIZE_SCALE).
-    let shares = (signal.size_usdc / price).trunc_with_scale(LOT_SIZE_SCALE);
-    if shares <= Decimal::ZERO {
-        bail!("Computed shares {shares} ≤ 0 for price {price}");
-    }
+    let (price, shares) = maker_quote(signal.side, signal.size_usdc, best_bid, best_ask)?;
 
     // Build limit order via SDK
     let order = client
@@ -141,21 +128,14 @@ async fn place_market_order(
     client: &AuthClient,
     signer: &AutoSigner,
 ) -> Result<()> {
-    let ob = state
-        .orderbooks
-        .get(&signal.condition_id)
-        .ok_or_else(|| anyhow::anyhow!("No orderbook for {:?}", signal.condition_id))?;
-
-    // Estimate fill price from the top of book for position tracking.
-    let fill_price = match signal.side {
-        Side::Yes => ob.best_ask,
-        Side::No => dec!(1) - ob.best_bid,
+    let (best_bid, best_ask) = {
+        let ob = state
+            .orderbooks
+            .get(&signal.condition_id)
+            .ok_or_else(|| anyhow::anyhow!("No orderbook for {:?}", signal.condition_id))?;
+        (ob.best_bid, ob.best_ask)
     };
-    drop(ob);
-
-    if fill_price <= dec!(0) || fill_price >= dec!(1) {
-        bail!("Fill price {fill_price} out of valid range (0, 1)");
-    }
+    let fill_price = taker_fill_price(signal.side, best_bid, best_ask)?;
 
     // Truncate USDC amount to 6 decimals (SDK USDC_DECIMALS).
     let usdc_amount = signal.size_usdc.trunc_with_scale(6);
@@ -236,6 +216,45 @@ pub fn round_tick(price: Decimal, tick: Decimal) -> Decimal {
     }
     let ticks = (price / tick).round();
     ticks * tick
+}
+
+/// Pure helper: derive maker price + share count from signal side, USDC budget,
+/// and current best-bid/best-ask. Extracted from `place_maker_order` so it can
+/// be unit-tested without the SDK or live network.
+///
+/// Returns `(price, shares)` or an error when the price falls outside the
+/// `(0, 1)` valid range or when the share count truncates to zero.
+pub fn maker_quote(
+    side: Side,
+    size_usdc: Decimal,
+    best_bid: Decimal,
+    best_ask: Decimal,
+) -> Result<(Decimal, Decimal)> {
+    let price = match side {
+        Side::Yes => best_bid + dec!(0.01),
+        Side::No => best_ask - dec!(0.01),
+    };
+    if price <= dec!(0) || price >= dec!(1) {
+        bail!("Price {price} out of valid range (0, 1)");
+    }
+    let shares = (size_usdc / price).trunc_with_scale(LOT_SIZE_SCALE);
+    if shares <= Decimal::ZERO {
+        bail!("Computed shares {shares} ≤ 0 for price {price}");
+    }
+    Ok((price, shares))
+}
+
+/// Pure helper: derive expected fill price for an aggressive market order.
+/// Used by `place_market_order`; extracted for unit testing.
+pub fn taker_fill_price(side: Side, best_bid: Decimal, best_ask: Decimal) -> Result<Decimal> {
+    let fill_price = match side {
+        Side::Yes => best_ask,
+        Side::No => dec!(1) - best_bid,
+    };
+    if fill_price <= dec!(0) || fill_price >= dec!(1) {
+        bail!("Fill price {fill_price} out of valid range (0, 1)");
+    }
+    Ok(fill_price)
 }
 
 #[cfg(test)]

@@ -19,6 +19,8 @@ use alloy::signers::local::PrivateKeySigner;
 use anyhow::{Result, bail};
 use tracing::info;
 
+pub mod polygon;
+
 // ── Trait ──────────────────────────────────────────────────────────────────
 
 /// Implemented by all wallet signing backends.
