@@ -19,5 +19,13 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // Polling intervals + filter-fallback patterns trigger this; the suggested
+      // refactor (move to event handlers / external sync) is not applicable here
+      // because the fetch is on a timer, not a user action.
+      'react-hooks/set-state-in-effect': 'off',
+      // ToastProvider co-locates the hook with the component on purpose.
+      'react-refresh/only-export-components': 'off',
+    },
   },
 ])

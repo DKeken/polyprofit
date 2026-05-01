@@ -72,6 +72,12 @@ pub struct DataApiClient {
     pub http: reqwest::Client,
 }
 
+impl Default for DataApiClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DataApiClient {
     pub fn new() -> Self {
         let http = reqwest::Client::builder()

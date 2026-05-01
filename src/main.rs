@@ -5,7 +5,7 @@ use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 use alloy::signers::local::PrivateKeySigner;
-use polymarket_client_sdk::auth::Credentials;
+use polymarket_sdk::auth::Credentials;
 use uuid::Uuid;
 
 use pp_core::{AppState, Asset, Config};
@@ -229,11 +229,10 @@ async fn main() -> Result<()> {
     state.load_asset_registry(&config.asset_definitions);
     restore_persisted_state(&state, &config);
 
-    if let Some(db) = state.db.as_ref() {
-        if let Err(e) = db.backfill_equity_if_empty(&state.trades.read()) {
+    if let Some(db) = state.db.as_ref()
+        && let Err(e) = db.backfill_equity_if_empty(&state.trades.read()) {
             tracing::warn!("Failed to backfill equity curve: {}", e);
         }
-    }
 
     let fee_cache = fee_cache::new_fee_cache();
 

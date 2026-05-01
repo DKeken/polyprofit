@@ -8,12 +8,12 @@ use anyhow::Context;
 use alloy::primitives::Address;
 use alloy::signers::Signer as _;
 use alloy::signers::local::PrivateKeySigner;
-use polymarket_client_sdk::POLYGON;
-use polymarket_client_sdk::auth::Credentials;
-use polymarket_client_sdk::auth::Normal;
-use polymarket_client_sdk::auth::state::Authenticated;
-use polymarket_client_sdk::clob::types::{SignableOrder, SignedOrder};
-use polymarket_client_sdk::clob::{Client as ClobClient, Config as ClobConfig};
+use polymarket_sdk::POLYGON;
+use polymarket_sdk::auth::Credentials;
+use polymarket_sdk::auth::Normal;
+use polymarket_sdk::auth::state::Authenticated;
+use polymarket_sdk::clob::types::{SignableOrder, SignedOrder};
+use polymarket_sdk::clob::{Client as ClobClient, Config as ClobConfig};
 /// Authenticated CLOB client type alias.
 /// Created via `Client::new(...).authentication_builder(&signer).authenticate().await`.
 pub type AuthClient = ClobClient<Authenticated<Normal>>;
@@ -47,7 +47,6 @@ impl AutoSigner {
             }
         };
 
-        let has_creds = credentials.is_some();
         if let Some(credentials) = credentials {
             auth = auth.credentials(credentials);
         }
@@ -57,27 +56,8 @@ impl AutoSigner {
             .await
             .context("CLOB authentication failed")?;
 
-        if has_creds {
-            // The SDK may panic inside start_heartbeats ("period must be non-zero")
-            // due to internal timer configuration issues. Catch the panic and convert
-            // it into a recoverable error so the rest of the app can continue.
-            let hb_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                ClobClient::start_heartbeats(&mut client)
-            }));
-            match hb_result {
-                Ok(Ok(())) => {}
-                Ok(Err(e)) => {
-                    tracing::warn!("start_heartbeats returned error (non-fatal): {e}");
-                }
-                Err(panic_payload) => {
-                    let msg = panic_payload
-                        .downcast_ref::<String>()
-                        .map(|s| s.as_str())
-                        .or_else(|| panic_payload.downcast_ref::<&str>().copied())
-                        .unwrap_or("unknown panic");
-                    tracing::warn!("start_heartbeats panicked (non-fatal): {msg}");
-                }
-            }
+        if let Err(e) = ClobClient::start_heartbeats(&mut client) {
+            tracing::warn!("start_heartbeats failed (non-fatal): {e}");
         }
         Ok(client)
     }
@@ -109,16 +89,5 @@ impl LiveTradingContext {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+mod lib_tests;
 
-    #[test]
-    fn local_auto_signer_preserves_address() {
-        let raw = "0x59c6995e998f97a5a0044966f094538e41db72f727f3d6c2f3b6b9f4f6f9c1d4";
-        let signer: PrivateKeySigner = raw.parse().expect("test key parses");
-        let expected = signer.address();
-
-        let auto = AutoSigner::local(signer);
-        assert_eq!(auto.address(), expected);
-    }
-}

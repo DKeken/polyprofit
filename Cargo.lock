@@ -2857,10 +2857,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "polymarket-client-sdk"
-version = "0.4.4"
+name = "polymarket_client_sdk_v2"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0852dbe6df78c4964452d6071abdc7ec0f649042c76733a075cb79e322745eaa"
+checksum = "594de0bf0e129e266946f02acbf579253951afbbee92fc1564da3c9179303aea"
 dependencies = [
  "alloy",
  "async-stream",
@@ -2886,10 +2886,11 @@ dependencies = [
  "serde_path_to_error",
  "serde_repr",
  "serde_with",
+ "sha1",
  "sha2",
  "strum_macros 0.28.0",
  "tokio",
- "tokio-tungstenite 0.28.0",
+ "tokio-tungstenite 0.29.0",
  "tokio-util",
  "tracing",
  "url",
@@ -2903,7 +2904,7 @@ dependencies = [
  "alloy",
  "anyhow",
  "chrono",
- "polymarket-client-sdk",
+ "polymarket_client_sdk_v2",
  "pp-core",
  "pp-discovery",
  "pp-execution",
@@ -2962,7 +2963,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "polymarket-client-sdk",
  "pp-core",
  "reqwest",
  "rust_decimal",
@@ -2981,7 +2981,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "dashmap",
- "polymarket-client-sdk",
+ "polymarket_client_sdk_v2",
  "pp-core",
  "reqwest",
  "rust_decimal",
@@ -3000,7 +3000,6 @@ dependencies = [
  "anyhow",
  "chrono",
  "futures",
- "polymarket-client-sdk",
  "pp-core",
  "rust_decimal",
  "serde",
@@ -3060,12 +3059,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "pp-venue"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "futures",
+ "pp-core",
+ "rust_decimal",
+ "rust_decimal_macros",
+ "serde",
+ "tokio",
+ "tracing",
+ "ts-rs",
+]
+
+[[package]]
+name = "pp-venue-polymarket"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "polymarket_client_sdk_v2",
+ "pp-core",
+ "pp-discovery",
+ "pp-execution",
+ "pp-venue",
+ "rust_decimal",
+ "rust_decimal_macros",
+ "serde",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "pp-wallet"
 version = "0.1.0"
 dependencies = [
  "alloy",
  "anyhow",
- "polymarket-client-sdk",
  "tracing",
  "uuid",
 ]
@@ -4505,11 +4540,7 @@ checksum = "d25a406cddcc431a75d3d9afc6a7c0f7428d4891dd973e4d54c56b46127bf857"
 dependencies = [
  "futures-util",
  "log",
- "rustls",
- "rustls-native-certs",
- "rustls-pki-types",
  "tokio",
- "tokio-rustls",
  "tungstenite 0.28.0",
 ]
 
@@ -4786,8 +4817,6 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.9.2",
- "rustls",
- "rustls-pki-types",
  "sha1",
  "thiserror 2.0.18",
  "utf-8",

@@ -5,11 +5,10 @@ import { fmtUsd } from "../../shared/lib/format";
 import {
   Panel,
   EmptyState,
-  Stat,
-  Button,
   Input,
   Select,
   Checkbox,
+  Spinner,
 } from "../../shared/ui";
 import { WhaleRowItem } from "./WhaleRowItem";
 import { AddWhaleRow } from "./AddWhaleRow";
@@ -58,7 +57,7 @@ function PollEmptyState({ onPoll }: { onPoll: () => Promise<void> }) {
       >
         {polling ? (
           <>
-            <span className="inline-block w-3 h-3 border-2 border-emerald-400/40 border-t-emerald-400 rounded-full animate-spin" />
+            <Spinner size="xs" label="Scanning" />
             Scanning…
           </>
         ) : (

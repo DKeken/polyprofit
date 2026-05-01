@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import type { WhaleRow, WhaleEventRow, SortKey, SortDir, ViewFilter } from "./types";
 import { useSplitResize } from "../../shared/hooks/useSplitResize";
 import { useScanStatus, fmtCountdown } from "../../shared/hooks/useScanStatus";
-import { Button, ResizeDivider } from "../../shared/ui";
+import { Button, ResizeDivider, Spinner } from "../../shared/ui";
 import { RegistryTab } from "./RegistryTab";
 import { ActivityTab } from "./ActivityTab";
 import { ScanSettingsModal } from "./ScanSettingsModal";
@@ -278,7 +278,7 @@ export default function WhaleTracker({
           >
             {scanning ? (
               <>
-                <span className="inline-block w-2.5 h-2.5 border-2 border-emerald-400/40 border-t-emerald-400 rounded-full animate-spin" />
+                <Spinner size="xs" label="Scanning whales" />
                 Scanning…
               </>
             ) : (

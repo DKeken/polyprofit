@@ -56,10 +56,10 @@ echo 'fn main() { println!("polyprofit"); }' > src/main.rs
 
 ```bash
 # Frontend (React 19 + Vite 6 + Tailwind 4)
-npm create vite@latest frontend -- --template react-ts
+bun create vite frontend --template react-ts
 cd frontend
-npm install recharts
-npm install -D tailwindcss @tailwindcss/vite
+bun add recharts
+bun add -d tailwindcss @tailwindcss/vite
 ```
 
 ---
@@ -273,7 +273,7 @@ cargo run --release
 
 ```bash
 cd frontend
-npm run dev
+bun run dev
 # Открыть http://localhost:5173
 # Показывает дашборд с реальными данными от Rust backend
 ```

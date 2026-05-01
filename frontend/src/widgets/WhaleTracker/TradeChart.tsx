@@ -16,6 +16,7 @@ import type { ChartPoint, ChartMode } from "./types";
 import { buyLabel } from "./types";
 import { TradeTooltip } from "./TradeTooltip";
 import { fmtUsd } from "../../shared/lib/format";
+import { Spinner } from "../../shared/ui";
 
 interface TradeChartProps {
   chartData: ChartPoint[];
@@ -87,7 +88,7 @@ function DebouncedChartContainer({
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ width: 0, height: 0 });
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     const el = wrapperRef.current;
@@ -135,11 +136,12 @@ const yAxisFormatter = (val: number) => `$${fmtUsd(val, 0)}`;
 
 // ── Tooltip renderer (stable ref) ──────────────────────────────────────
 
-const tooltipContent = (props: {
-  active?: boolean;
-  payload?: ReadonlyArray<{ payload: ChartPoint }>;
-}) => (
-  <TradeTooltip active={props.active} payload={props.payload} />
+// Recharts' TooltipContentProps changes between versions; we accept the
+// generic shape and trust the runtime payload contract since `dataKey`
+// is fixed for our chart.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const tooltipContent = (props: any) => (
+  <TradeTooltip active={props.active} payload={props.payload as ReadonlyArray<{ payload: ChartPoint }> | undefined} />
 );
 
 // ── Main component ─────────────────────────────────────────────────────
@@ -198,7 +200,7 @@ export const TradeChart = memo(function TradeChart({
       {histLoading ? (
         <div className="h-48 flex items-center justify-center">
           <div className="flex gap-1.5 items-center text-zinc-600 text-xs font-mono">
-            <span className="animate-spin">⟳</span> Loading history…
+            <Spinner size="xs" label="Loading history" /> Loading history…
           </div>
         </div>
       ) : histError ? (

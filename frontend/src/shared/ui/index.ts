@@ -1,6 +1,7 @@
 export * from "./Panel";
 export * from "./EmptyState";
 export * from "./Button";
+export * from "./IconButton";
 export * from "./Stat";
 export * from "./Badge";
 export * from "./Input";
@@ -8,3 +9,8 @@ export * from "./Select";
 export * from "./ToastProvider";
 export * from "./Checkbox";
 export * from "./ResizeDivider";
+export * from "./Card";
+export * from "./Modal";
+export * from "./Tabs";
+export * from "./Skeleton";
+export * from "./Spinner";

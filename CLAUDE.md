@@ -31,14 +31,17 @@
 ## Build & Test
 
 ```bash
+# Install (frontend)
+cd frontend && bun install
+
 # Build
-npm run build
+cd frontend && bun run build
 
 # Test
-npm test
+cd frontend && bun test
 
 # Lint
-npm run lint
+cd frontend && bun run lint
 ```
 
 - ALWAYS run tests after making code changes

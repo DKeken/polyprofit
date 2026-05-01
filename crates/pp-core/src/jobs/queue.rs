@@ -181,19 +181,22 @@ impl<H: JobHandler> JobQueue<H> {
     }
 }
 
-// dynamic job
+// ── dynamic job ─────────────────────────────────────────────────────────────
+
+/// Boxed async closure: takes a payload string, returns a `JobResult` future.
+type DynJobFuture = std::pin::Pin<Box<dyn std::future::Future<Output = JobResult> + Send>>;
+/// Type-erased job processor used by [`DynJob`].
+pub type DynJobFn = std::sync::Arc<dyn Fn(String) -> DynJobFuture + Send + Sync>;
+
 impl std::fmt::Debug for DynJob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "DynJob")
     }
 }
+
 pub struct DynJob {
     pub name: &'static str,
-    pub func: std::sync::Arc<
-        dyn Fn(String) -> std::pin::Pin<Box<dyn std::future::Future<Output = JobResult> + Send>>
-            + Send
-            + Sync,
-    >,
+    pub func: DynJobFn,
 }
 impl JobHandler for DynJob {
     type Payload = String;

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import usdcLogo from "../../assets/usdc.svg";
 import polLogo from "../../assets/matic.svg";
-import { api, type StatusResponse, type WalletInfoResponse, type TradesExportResponse } from "../../api";
+import { api, type StatusResponse, type WalletInfoResponse, type TradesExportResponse } from "../../shared/api";
 import {
   ShieldCheck,
   ShieldAlert,
@@ -13,7 +13,6 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertTriangle,
-  Loader2,
   ArrowRight,
   Pencil,
   Server,
@@ -25,7 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { fmtTimeSimple } from "../../shared/lib/format";
-import { fmtTimeSimple } from "../../shared/lib/format";
+import { Spinner } from "../../shared/ui";
 import QRCodeImport from "react-qr-code";
 
 // Fallback for bundler interop
@@ -128,7 +127,7 @@ export default function WalletPage() {
   if (checking) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="w-5 h-5 text-zinc-500 animate-spin" />
+        <Spinner size="md" label="Checking authentication" />
       </div>
     );
   }
@@ -301,7 +300,7 @@ export default function WalletPage() {
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-md text-[10px] font-mono font-bold uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-emerald-500/15 text-emerald-500/90 border border-emerald-700/40 hover:bg-emerald-500/25"
                 >
                   {saving ? (
-                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Restarting…</>
+                    <><Spinner size="xs" label="Restarting" /> Restarting…</>
                   ) : authenticated ? (
                     <><RefreshCw className="w-3.5 h-3.5" /> Save & Restart Bot</>
                   ) : (

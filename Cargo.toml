@@ -10,6 +10,8 @@ members = [
     "crates/pp-server",
     "crates/pp-whales",
     "crates/pp-wallet",
+    "crates/pp-venue",
+    "crates/pp-venue-polymarket",
 ]
 
 [workspace.dependencies]
@@ -32,7 +34,8 @@ parking_lot = "0.12"
 tokio-util = "0.7"
 uuid = { version = "1", features = ["v4"] }
 alloy = { version = "1", features = ["signers", "signer-local"] }
-polymarket-client-sdk = { version = "0.4", features = [
+async-trait = "0.1"
+polymarket_sdk = { package = "polymarket_client_sdk_v2", version = "0.5", features = [
     "clob", "ws", "rtds", "gamma", "heartbeats", "ctf", "tracing", "data"
 ] }
 
@@ -46,6 +49,8 @@ pp-risk = { path = "crates/pp-risk" }
 pp-server = { path = "crates/pp-server" }
 pp-whales = { path = "crates/pp-whales" }
 pp-wallet = { path = "crates/pp-wallet" }
+pp-venue = { path = "crates/pp-venue" }
+pp-venue-polymarket = { path = "crates/pp-venue-polymarket" }
 
 [package]
 name = "polyprofit"
@@ -69,7 +74,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
-polymarket-client-sdk.workspace = true
+polymarket_sdk.workspace = true
 alloy.workspace = true
 uuid.workspace = true
 

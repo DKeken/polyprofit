@@ -6,7 +6,7 @@ use dashmap::DashMap;
 use rust_decimal::Decimal;
 use tracing::{debug, info, warn};
 
-use polymarket_client_sdk::types::U256;
+use polymarket_sdk::types::U256;
 
 use pp_core::{AppState, TokenId};
 use crate::AuthClient;

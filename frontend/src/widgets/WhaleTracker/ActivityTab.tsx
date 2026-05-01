@@ -2,7 +2,7 @@ import { memo, useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import type { WhaleEventRow } from "./types";
 import { fmtUsd, shortenAddress } from "../../shared/lib/format";
-import { Panel, EmptyState, Badge, Input, Select } from "../../shared/ui";
+import { Panel, EmptyState, Badge, Input, Select, Spinner } from "../../shared/ui";
 import { ExternalLink, User } from "lucide-react";
 
 // ── Activity Row ──────────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ const ActivityRow = memo(function ActivityRow({
         >
           <span className="truncate">{event.question}</span>
           {navigating ? (
-            <span className="inline-block w-2.5 h-2.5 border-2 border-emerald-400/40 border-t-emerald-400 rounded-full animate-spin shrink-0" />
+            <Spinner size="xs" label="Loading market" className="shrink-0" />
           ) : (
             <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
           )}

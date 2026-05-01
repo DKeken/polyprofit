@@ -1,4 +1,4 @@
-import { useBot } from "../../hooks/useBot";
+import { useBot } from "../../shared/api";
 import { useWhales } from "../../shared/hooks/useWhales";
 import WhaleTracker from "../../widgets/WhaleTracker";
 import { useRoute } from "wouter";

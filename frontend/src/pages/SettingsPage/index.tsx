@@ -1,5 +1,5 @@
-import { useBot } from "../../hooks/useBot";
-import Settings from "../../components/Settings";
+import { useBot } from "../../shared/api";
+import Settings from "../../features/settings-form";
 import { Link } from "wouter";
 
 export default function SettingsPage() {

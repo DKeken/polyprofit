@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { whaleApi } from "../api";
 import type { WhaleRow, WhaleEventRow, WhaleHistoryResponse } from "../api";
+// (paths point to shared/api/index.ts via the relative-up resolution; kept for clarity)
 
 export type { WhaleRow, WhaleEventRow };
 

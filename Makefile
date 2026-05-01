@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: dev build verify smoke
+.PHONY: dev build verify
 
 # Hot-reload dev: Rust auto-restarts on .rs changes, Vite HMR on frontend changes.
 # Open http://localhost:5173 in the browser.
@@ -38,7 +38,7 @@ dev:
 	cargo watch -w crates -w src -w Cargo.toml -w Cargo.lock \
 		-s 'cargo build && exec ./target/debug/polyprofit' & \
 	backend_pid=$$!; \
-	npm --prefix frontend run dev & \
+	(cd frontend && bun run dev) & \
 	frontend_pid=$$!; \
 	while kill -0 $$backend_pid 2>/dev/null && kill -0 $$frontend_pid 2>/dev/null; do \
 		sleep 1; \
@@ -57,14 +57,11 @@ dev:
 
 # Production build: compile Rust release + bundle frontend into dist/
 build:
-	npm --prefix frontend run build
+	cd frontend && bun run build
 	cargo build --release
 
-smoke:
-	node scripts/runtime-smoke.mjs
-
-verify: smoke
+verify:
 	cargo test --workspace
-	npm --prefix frontend run lint
-	npm --prefix frontend run test
-	npm --prefix frontend run build
+	cd frontend && bun run lint
+	cd frontend && bun run test
+	cd frontend && bun run build

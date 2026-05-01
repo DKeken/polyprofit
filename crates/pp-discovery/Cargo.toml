@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 pp-core.workspace = true
-polymarket-client-sdk.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 anyhow.workspace = true

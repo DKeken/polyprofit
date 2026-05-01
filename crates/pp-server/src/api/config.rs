@@ -208,12 +208,11 @@ pub async fn update_config(
 
     tracing::info!(changes = ?changes, "Config updated via API");
 
-    if let Some(ref db) = state.db {
-        if let Err(e) = db.save_config(&cfg) {
+    if let Some(ref db) = state.db
+        && let Err(e) = db.save_config(&cfg) {
             tracing::error!(error = %e, "Failed to persist config to DB");
             return internal_error(format!("failed to persist config: {e}")).into_response();
         }
-    }
 
     drop(cfg);
     state.rebuild_asset_registry();

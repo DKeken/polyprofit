@@ -9,9 +9,6 @@
 import { useRef, useEffect } from "react";
 import { useToast } from "./ToastProvider";
 
-/** SessionStorage key so we survive HMR but reset on real page load */
-const SESSION_KEY = "whale-alert-baseline";
-
 export function useWhaleAlerts(whaleAlertCount: number) {
   const { addToast } = useToast();
   const prevCountRef = useRef<number | null>(null);

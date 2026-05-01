@@ -55,10 +55,6 @@ export function fmtPnl(value: number, decimals = 2): string {
   return `${pnlSign(value)}$${fmtUsd(Math.abs(value), decimals)}`;
 }
 
-export function fmtPnl(value: number, decimals = 2): string {
-  return `${pnlSign(value)}$${fmtUsd(Math.abs(value), decimals)}`;
-}
-
 export function fmtTime(dateStr: string, lang: Language, tz: TimezoneMode): string {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return dateStr;

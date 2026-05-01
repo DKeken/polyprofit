@@ -1,5 +1,4 @@
 import { memo, useState, useMemo } from "react";
-import { useLocation } from "wouter";
 import type { WhaleRow } from "./types";
 import { fmtUsd, fmtPnl, shortenAddress, pnlColor } from "../../shared/lib/format";
 import { Stat, Badge, Checkbox } from "../../shared/ui";

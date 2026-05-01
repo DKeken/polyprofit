@@ -2,7 +2,8 @@
  * Shared API layer — re-exports the typed client and adds whale endpoints.
  * All fetch() calls live here; components never call fetch() directly.
  */
-export * from "../../api";
+export * from "./client";
+export * from "./useBot";
 
 // ── Whale types ──────────────────────────────────────────────────────────────
 

@@ -27,8 +27,7 @@
 | Зависимость | Версия | Зачем |
 |---|---|---|
 | **Rust** | stable latest (edition 2024) | Backend, торговый движок |
-| **Node.js** | 18+ | Frontend сборка |
-| **npm** | 9+ | Пакетный менеджер |
+| **Bun** | 1.3+ | Frontend runtime, сборка, тесты, пакетный менеджер |
 
 Дополнительно для запуска runtime:
 - Polymarket аккаунт с USDC на Polygon
@@ -58,8 +57,8 @@ cargo build --release
 
 ```bash
 cd frontend
-npm install
-npm run build
+bun install
+bun run build
 cd ..
 ```
 
@@ -197,7 +196,7 @@ polyprofit/
 │   │   ├── components/      # Dashboard компоненты
 │   │   ├── hooks/           # useBot (WS auto-reconnect)
 │   │   └── api.ts           # HTTP API клиент
-│   └── dist/                # Собранная статика (после npm run build)
+│   └── dist/                # Собранная статика (после bun run build)
 └── docs/                    # Документация (architecture, strategy, API, etc.)
 ```
 
@@ -259,7 +258,7 @@ ws://localhost:3000/ws
 
 ```bash
 cd frontend
-npm run dev
+bun run dev
 ```
 
 Откроется на `http://localhost:5173` с проксированием API и WS на backend (`localhost:3000`).
@@ -270,7 +269,7 @@ npm run dev
 
 ```bash
 cd frontend
-npm run build
+bun run build
 ```
 
 Собранная статика в `frontend/dist/` — Axum отдаёт её по `/`. Dashboard доступен на том же порту, что и API (`http://localhost:3000`).
@@ -357,7 +356,7 @@ RUST_LOG=debug cargo run --release
 | Win rate < 50% | Слабый edge | Увеличить `min_edge` до 0.15 |
 | `POLYMARKET_PRIVATE_KEY must be set` | Нет `.env` или переменная не экспортирована | Создать `.env` с ключом |
 | Порт 3000 занят | Другой процесс | Изменить `[server] port` в `config.toml` |
-| Frontend не обновляется | Старый билд | `cd frontend && npm run build` |
+| Frontend не обновляется | Старый билд | `cd frontend && bun run build` |
 
 ---
 

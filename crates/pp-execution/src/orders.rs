@@ -8,8 +8,8 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use tracing::info;
 
-use polymarket_client_sdk::clob::types::{Amount, OrderType, Side as SdkSide};
-use polymarket_client_sdk::types::U256;
+use polymarket_sdk::clob::types::{Amount, OrderType, Side as SdkSide};
+use polymarket_sdk::types::U256;
 
 use pp_core::{AppState, MakerOrder, OrderStrategy, Position, Signal, Side, TradeLog};
 use crate::{AuthClient, AutoSigner};
@@ -51,16 +51,6 @@ pub async fn execute(
     Ok(())
 }
 
-/// Map our Side to SDK Side.
-/// Yes → Buy (we want the Yes token), No → Buy the No token (both are buys on different tokens).
-/// The token_id already selects which token, so we always Buy.
-fn sdk_side(side: Side) -> SdkSide {
-    match side {
-        Side::Yes => SdkSide::Buy,
-        Side::No => SdkSide::Buy,
-    }
-}
-
 /// Place a post-only maker order via the SDK.
 async fn place_maker_order(
     state: &Arc<AppState>,
@@ -96,7 +86,7 @@ async fn place_maker_order(
     let order = client
         .limit_order()
         .token_id(token_u256)
-        .side(sdk_side(signal.side))
+        .side(SdkSide::Buy)
         .price(price)
         .size(shares)
         .post_only(true)
@@ -180,7 +170,7 @@ async fn place_market_order(
     let order = client
         .market_order()
         .token_id(token_u256)
-        .side(sdk_side(signal.side))
+        .side(SdkSide::Buy)
         .amount(amount)
         .order_type(OrderType::FOK)
         .build()
@@ -249,45 +239,5 @@ pub fn round_tick(price: Decimal, tick: Decimal) -> Decimal {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use rust_decimal_macros::dec;
-
-    #[test]
-    fn round_tick_snaps_to_cent() {
-        assert_eq!(round_tick(dec!(0.534), dec!(0.01)), dec!(0.53));
-        assert_eq!(round_tick(dec!(0.535), dec!(0.01)), dec!(0.54));
-        assert_eq!(round_tick(dec!(0.10), dec!(0.01)), dec!(0.10));
-    }
-
-    #[test]
-    fn round_tick_zero_tick_returns_price() {
-        assert_eq!(round_tick(dec!(0.123456), Decimal::ZERO), dec!(0.123456));
-    }
-
-    #[test]
-    fn shares_truncation_to_2dp() {
-        // SDK LOT_SIZE_SCALE = 2: size must have <= 2 decimal places
-        let usdc = dec!(10.00);
-        let price = dec!(0.33);
-        let shares = (usdc / price).trunc_with_scale(LOT_SIZE_SCALE);
-        // 10 / 0.33 = 30.303030... → truncated to 30.30
-        assert_eq!(shares, dec!(30.30));
-        assert!(shares.scale() <= LOT_SIZE_SCALE);
-    }
-
-    #[test]
-    fn shares_truncation_exact() {
-        let usdc = dec!(5.00);
-        let price = dec!(0.50);
-        let shares = (usdc / price).trunc_with_scale(LOT_SIZE_SCALE);
-        assert_eq!(shares, dec!(10.00));
-    }
-
-    #[test]
-    fn sdk_side_always_buy() {
-        // Both Yes and No map to Buy — token_id already selects the token
-        assert_eq!(sdk_side(Side::Yes), SdkSide::Buy);
-        assert_eq!(sdk_side(Side::No), SdkSide::Buy);
-    }
-}
+#[path = "orders_tests.rs"]
+mod orders_tests;

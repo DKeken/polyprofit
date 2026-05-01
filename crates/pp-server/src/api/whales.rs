@@ -293,14 +293,13 @@ pub async fn market_slug(
         Ok(resp) if resp.status().is_success() => {
             if let Ok(val) = resp.json::<serde_json::Value>().await {
                 // CLOB returns { market_slug: "...", ... }
-                if let Some(slug) = val.get("market_slug").and_then(|s| s.as_str()) {
-                    if !slug.is_empty() {
+                if let Some(slug) = val.get("market_slug").and_then(|s| s.as_str())
+                    && !slug.is_empty() {
                         return (
                             StatusCode::OK,
                             Json(serde_json::json!({ "slug": slug })),
                         ).into_response();
                     }
-                }
             }
         }
         _ => {}

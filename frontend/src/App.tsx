@@ -1,6 +1,6 @@
 import { Suspense, lazy, useState, useEffect } from "react";
 import { Link, Route, Switch, useLocation } from "wouter";
-import { useBot } from "./hooks/useBot";
+import { useBot } from "./shared/api";
 import { ToastProvider } from "./shared/ui/ToastProvider";
 import { useWhaleAlerts } from "./shared/ui/useWhaleAlerts";
 import {
@@ -16,14 +16,11 @@ import {
 import { Select } from "./shared/ui/Select";
 import { useAppStore, type DataPeriod, type Language, type TimezoneMode } from "./shared/store/useAppStore";
 import { buildTranslator } from "./shared/lib/i18n";
-import { formatDuration } from "./shared/lib/format";
-import { formatDuration } from "./shared/lib/format";
-
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const WhalesPage = lazy(() => import("./pages/WhalesPage"));
 const WalletPage = lazy(() => import("./pages/WalletPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
-const Markets = lazy(() => import("./components/Markets"));
+const Markets = lazy(() => import("./features/markets-list"));
 
 const NAV_TABS: { path: string; label: string; match?: string[] }[] = [
   { path: "/", label: "Dashboard" },
@@ -46,16 +43,6 @@ function formatUptime(secs: number | undefined): string {
   const m = Math.floor((secs % 3600) / 60);
   const s = Math.floor(secs % 60);
   return [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
-}
-
-function formatUptimeShort(secs: number | undefined): string {
-  if (!secs) return "—";
-  return formatDuration(secs);
-}
-
-function formatUptimeShort(secs: number | undefined): string {
-  if (!secs) return "—";
-  return formatDuration(secs);
 }
 
 function Loader() {

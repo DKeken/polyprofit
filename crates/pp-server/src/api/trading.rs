@@ -138,9 +138,9 @@ pub async fn pnl_history(
 ) -> Json<PnlHistoryResponse> {
     let since_ts = parse_period_to_since_ts(query.period.as_deref());
 
-    if let Some(ref db) = state.db {
-        if let Ok(history) = db.load_equity_history_since(since_ts, 500) {
-            if !history.is_empty() {
+    if let Some(ref db) = state.db
+        && let Ok(history) = db.load_equity_history_since(since_ts, 500)
+            && !history.is_empty() {
                 let points: Vec<PnlPointDto> = history
                     .into_iter()
                     .map(|(ts, cents)| {
@@ -156,8 +156,6 @@ pub async fn pnl_history(
 
                 return Json(PnlHistoryResponse { points });
             }
-        }
-    }
 
     // Fallback if no history yet
     let trades = state.trades.read();

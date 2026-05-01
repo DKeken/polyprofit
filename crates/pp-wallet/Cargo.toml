@@ -7,5 +7,4 @@ edition = "2024"
 anyhow.workspace = true
 tracing.workspace = true
 alloy.workspace = true
-polymarket-client-sdk.workspace = true
 uuid.workspace = true

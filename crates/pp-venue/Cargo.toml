@@ -1,0 +1,17 @@
+[package]
+name = "pp-venue"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pp-core.workspace = true
+async-trait.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+serde.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+chrono.workspace = true
+futures.workspace = true
+ts-rs = { version = "12", features = ["chrono-impl", "serde-json-impl"] }

@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import type { WhaleRow } from "./types";
-import { fmtUsd, fmtPnl, shortenAddress, pnlColor } from "../../shared/lib/format";
+import { fmtPnl, shortenAddress, pnlColor } from "../../shared/lib/format";
 import { Button, Badge, Input } from "../../shared/ui";
 
 interface AddWhaleRowProps {

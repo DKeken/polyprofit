@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { api } from "../../api";
-import { Button, Input } from "../../shared/ui";
+import { api } from "../../shared/api";
+import { Button, Input, Spinner } from "../../shared/ui";
 import {
   X,
   Settings2,
@@ -104,7 +104,7 @@ export function ScanSettingsModal({ onClose }: ScanSettingsModalProps) {
 
         {loadingCfg ? (
           <div className="flex items-center justify-center py-12">
-            <span className="inline-block w-5 h-5 border-2 border-zinc-600 border-t-emerald-400 rounded-full animate-spin" />
+            <Spinner size="md" label="Loading settings" />
           </div>
         ) : (
           <div className="px-5 py-4 flex flex-col gap-4">
